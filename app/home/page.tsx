@@ -17,7 +17,7 @@ export default function HomePage() {
     if (!user) router.replace("/");
     else {
       if (user.mode === null) setMode("fan"); // デフォルトはファン側
-      deliverDailyMessages();
+      void deliverDailyMessages();
     }
   }, [user, router, setMode, deliverDailyMessages]);
 

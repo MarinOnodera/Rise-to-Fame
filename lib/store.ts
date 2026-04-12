@@ -34,7 +34,7 @@ interface State {
   toggleBiasIdol: (idolId: string) => { ok: boolean; reason?: string };
   buyGoods: (goodsId: string, coins: number) => boolean;
   buyTicket: (tierId: string, coins: number, groupId: string) => boolean;
-  deliverDailyMessages: () => void;
+  deliverDailyMessages: () => Promise<void>;
   markRead: (msgId: string) => void;
   // producer
   createAgency: (name: string) => void;
@@ -186,32 +186,86 @@ export const useGame = create<State>()(
         return true;
       },
 
-      deliverDailyMessages: () => {
+      deliverDailyMessages: async () => {
         const u = get().user;
         if (!u) return;
         const today = todayKey();
         const existingKeys = new Set(
           u.inbox.map((m) => `${m.fromIdolId}:${m.at.slice(0, 10)}`)
         );
-        const newMsgs: DirectMessage[] = [];
-        for (const iid of u.biasIdolIds) {
-          const key = `${iid}:${today}`;
-          if (existingKeys.has(key)) continue;
-          const idol = get().idols.find((x) => x.id === iid);
-          if (!idol) continue;
-          const seed =
-            Math.floor(Date.now() / 86400000) + idol.name.charCodeAt(0);
-          newMsgs.push({
-            id: newId("msg_"),
-            fromIdolId: iid,
-            at: new Date().toISOString(),
-            text: dailyMessage(idol.stageName, idol.personality, u.nickname, seed),
-            read: false,
-          });
-        }
-        if (newMsgs.length) {
-          set({ user: { ...u, inbox: [...newMsgs, ...u.inbox] } });
-        }
+
+        const tasks = u.biasIdolIds
+          .filter((iid) => !existingKeys.has(`${iid}:${today}`))
+          .map((iid) => {
+            const idol = get().idols.find((x) => x.id === iid);
+            if (!idol) return null;
+
+            // 連続性のため、この子から来た直近のメッセージを1つ渡す
+            const prev = u.inbox.find((m) => m.fromIdolId === iid);
+            const prevSnippet = prev
+              ? prev.text.replace(/^\[.+?\]\n/, "").slice(0, 140)
+              : undefined;
+
+            return { idol, prevSnippet };
+          })
+          .filter(Boolean) as Array<{
+          idol: Idol;
+          prevSnippet?: string;
+        }>;
+
+        if (tasks.length === 0) return;
+
+        const newMsgs: DirectMessage[] = await Promise.all(
+          tasks.map(async ({ idol, prevSnippet }) => {
+            let text = "";
+            try {
+              const r = await fetch("/api/daily-message", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  idol: {
+                    stageName: idol.stageName,
+                    name: idol.name,
+                    country: idol.country,
+                    age: idol.age,
+                    personality: idol.personality,
+                    bioSeed: idol.bioSeed,
+                  },
+                  fanNickname: u.nickname,
+                  date: today,
+                  previousSnippet: prevSnippet,
+                }),
+              });
+              if (r.ok) {
+                const j = (await r.json()) as { text?: string };
+                if (j.text) text = `[${idol.stageName}]\n${j.text}`;
+              }
+            } catch {
+              // ignore, fallback below
+            }
+            if (!text) {
+              const seed =
+                Math.floor(Date.now() / 86400000) + idol.name.charCodeAt(0);
+              text = dailyMessage(
+                idol.stageName,
+                idol.personality,
+                u.nickname,
+                seed
+              );
+            }
+            return {
+              id: newId("msg_"),
+              fromIdolId: idol.id,
+              at: new Date().toISOString(),
+              text,
+              read: false,
+            } as DirectMessage;
+          })
+        );
+
+        const latest = get().user;
+        if (!latest) return;
+        set({ user: { ...latest, inbox: [...newMsgs, ...latest.inbox] } });
       },
 
       markRead: (msgId) => {
