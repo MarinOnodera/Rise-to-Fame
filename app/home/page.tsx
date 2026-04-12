@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useGame } from "@/lib/store";
 import { TopBar } from "@/components/TopBar";
-import { CityAds } from "@/components/CityAds";
+import { StreetScene } from "@/components/StreetScene";
 import { GroupCard } from "@/components/GroupCard";
 
 export default function HomePage() {
@@ -31,29 +31,43 @@ export default function HomePage() {
     <main className="pb-24">
       <TopBar title="Seoul Street" />
 
-      {/* Producer CTA */}
-      <section className="px-4 mt-4">
+      {/* Dual CTAs */}
+      <section className="px-4 mt-4 grid grid-cols-2 gap-3">
+        <Link
+          href="/fan/discover"
+          className="card !p-3 flex flex-col items-start gap-1 border-kpink/40 bg-gradient-to-br from-kpink/25 to-kpurple/20 active:scale-95"
+        >
+          <span className="text-2xl">🔮</span>
+          <span className="font-bold text-sm leading-tight">
+            推しアイドルを
+            <br />
+            探しに行く
+          </span>
+          <span className="text-[10px] opacity-70">AIがあなたに合う3人を選ぶ</span>
+        </Link>
         <Link
           href="/producer"
-          className="card flex items-center justify-between border-kpink/40 bg-gradient-to-r from-kpink/20 to-kpurple/20"
+          className="card !p-3 flex flex-col items-start gap-1 border-kgold/40 bg-gradient-to-br from-kgold/25 to-kpink/20 active:scale-95"
         >
-          <div>
-            <div className="text-xs opacity-70">
-              代表兼プロデューサーとして事務所を立ち上げる
-            </div>
-            <div className="font-bold">アイドルグループを作成する →</div>
-          </div>
           <span className="text-2xl">🎬</span>
+          <span className="font-bold text-sm leading-tight">
+            アイドルグループを
+            <br />
+            作成する
+          </span>
+          <span className="text-[10px] opacity-70">プロデューサーとして事務所設立</span>
         </Link>
       </section>
 
-      {/* City ads */}
-      <section className="px-4 mt-5">
+      {/* Street scene with product ads */}
+      <section className="px-4 mt-4">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-bold text-sm opacity-80">街の広告</h2>
-          <span className="text-[10px] opacity-50">SEOUL 2026</span>
+          <h2 className="font-bold text-sm opacity-80">江南 · 夕方</h2>
+          <span className="text-[10px] opacity-50">
+            広告をタップして推しに追加
+          </span>
         </div>
-        <CityAds />
+        <StreetScene />
       </section>
 
       {/* Top groups */}

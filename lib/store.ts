@@ -374,8 +374,8 @@ export const useGame = create<State>()(
       },
     }),
     {
-      name: "rise-to-fame-v1",
-      version: 1,
+      name: "rise-to-fame-v2",
+      version: 2,
     }
   )
 );

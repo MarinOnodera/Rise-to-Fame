@@ -101,29 +101,110 @@ export function buildDefaultWorld(): {
     });
   }
 
-  // 街の広告: 半分くらいがアイドル、残りは猫・犬・女優・バラエティ
-  const ads: CityAd[] = [];
-  // dominant グループを強めに露出
-  for (const g of groups) {
-    const count = g.dominant ? 3 : 1;
-    for (let i = 0; i < count; i++) {
-      ads.push({
-        id: `ad_${g.id}_${i}`,
-        kind: "idol",
-        groupId: g.id,
-        title: `${g.name} — ${g.concept}`,
-        colorA: g.colorA,
-        colorB: g.colorB,
-      });
-    }
-  }
-  ads.push(
-    { id: "ad_cat_1", kind: "cat", title: "Mochi Cat Café", colorA: "#ffd166", colorB: "#ff8ecb" },
-    { id: "ad_dog_1", kind: "dog", title: "Bark & Roll Park", colorA: "#8ecae6", colorB: "#ffb4a2" },
-    { id: "ad_actress_1", kind: "actress", title: "Ha Yujin — Perfume No.9", colorA: "#1d1d1d", colorB: "#d4af37" },
-    { id: "ad_variety_1", kind: "variety", title: "Late Night with Ken", colorA: "#ff3d8b", colorB: "#7b2cff" },
-    { id: "ad_cat_2", kind: "cat", title: "Neko Neko Ramen", colorA: "#ffbe0b", colorB: "#fb5607" },
-  );
+  // 街の広告: ガンナムの街並みを想定した商品広告。
+  // 一部アイドルが広告モデル (endorserIdolId) を担当。
+  const popularIdols = [...idols].sort((a, b) => b.popularity - a.popularity);
+  const pick = (n: number) => popularIdols[n % popularIdols.length];
+
+  const ads: CityAd[] = [
+    // ==== BILLBOARD（ビル上部の大看板） ====
+    {
+      id: "ad_cos_violet",
+      kind: "cosmetic",
+      brand: "LUNE",
+      product: "ベルベットティント No.07",
+      tagline: "唇だけで、語れ。",
+      endorserIdolId: pick(0).id,
+      x: 0.08,
+      placement: "billboard",
+      colorA: "#2a0a1f",
+      colorB: "#ff3d8b",
+    },
+    {
+      id: "ad_tech_galaxy",
+      kind: "tech",
+      brand: "NEOFOLD",
+      product: "Z7 スマートフォン",
+      tagline: "折りたたむ、未来。",
+      endorserIdolId: pick(1).id,
+      x: 0.42,
+      placement: "billboard",
+      colorA: "#0b0620",
+      colorB: "#00e5ff",
+    },
+    {
+      id: "ad_fashion_atelier",
+      kind: "fashion",
+      brand: "ATELIER SEOUL",
+      product: "Spring Couture '26",
+      tagline: "街を歩くランウェイ。",
+      endorserIdolId: pick(2).id,
+      x: 0.76,
+      placement: "billboard",
+      colorA: "#1d1d1d",
+      colorB: "#d4af37",
+    },
+    // ==== SHOP（路面店の店頭広告） ====
+    {
+      id: "ad_cafe_cloud",
+      kind: "cafe",
+      brand: "CLOUD NINE",
+      product: "ストロベリーラテ",
+      tagline: "雲にのまれて。",
+      endorserIdolId: pick(3).id,
+      x: 0.18,
+      placement: "shop",
+      colorA: "#ffb3d1",
+      colorB: "#fff0b3",
+    },
+    {
+      id: "ad_food_kimchi",
+      kind: "food",
+      brand: "HOT POT 24",
+      product: "キムチチゲ定食",
+      tagline: "深夜まで、熱く。",
+      endorserIdolId: pick(4).id,
+      x: 0.52,
+      placement: "shop",
+      colorA: "#ff4e2b",
+      colorB: "#ffd166",
+    },
+    {
+      id: "ad_drink_soda",
+      kind: "drink",
+      brand: "PICO SODA",
+      product: "ピーチ×レモン",
+      tagline: "ひとくち、夏。",
+      endorserIdolId: pick(5).id,
+      x: 0.84,
+      placement: "shop",
+      colorA: "#ff8ecb",
+      colorB: "#8ecae6",
+    },
+    // ==== BUS（街のバス広告） ====
+    {
+      id: "ad_cafe_nyan",
+      kind: "pet",
+      brand: "Mochi Cat Café",
+      product: "新店OPEN",
+      tagline: "猫 × 抹茶パフェ",
+      x: 0.3,
+      placement: "bus",
+      colorA: "#ffd166",
+      colorB: "#ff8ecb",
+    },
+    {
+      id: "ad_variety_ken",
+      kind: "variety",
+      brand: "MBC",
+      product: "Late Night with Ken",
+      tagline: "毎週金曜 深夜1時",
+      x: 0.7,
+      placement: "bus",
+      colorA: "#7b2cff",
+      colorB: "#ff3d8b",
+    },
+  ];
 
   return { groups, idols, ads };
 }

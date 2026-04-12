@@ -84,12 +84,27 @@ export interface Group {
   founded: string;
 }
 
-export type AdKind = "idol" | "cat" | "dog" | "actress" | "variety";
+export type AdKind =
+  | "cosmetic"
+  | "food"
+  | "drink"
+  | "tech"
+  | "fashion"
+  | "cafe"
+  | "variety"
+  | "pet";
+
 export interface CityAd {
   id: string;
   kind: AdKind;
-  groupId?: string;
-  title: string;
+  brand: string;
+  product: string;
+  tagline?: string;
+  // 広告モデル（アイドル）。あればクリックで推し追加フローに繋がる。
+  endorserIdolId?: string;
+  // 建物上の配置。横位置0..1、高さレベル(billboard/shop)
+  x: number;
+  placement: "billboard" | "shop" | "bus";
   colorA: string;
   colorB: string;
 }

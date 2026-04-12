@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useGame } from "@/lib/store";
+import { DancingIdols } from "@/components/DancingIdols";
 
 // ニックネーム条件: 英数字 + 記号1個、8〜12文字
 const NICK_RE = /^(?=.{8,12}$)(?=.*[A-Za-z0-9])(?=.*[!@#$%^&*_\-.])[A-Za-z0-9!@#$%^&*_\-.]+$/;
@@ -24,14 +25,15 @@ export default function LandingPage() {
 
   if (user) {
     return (
-      <main className="p-6 flex flex-col gap-6 min-h-screen justify-center">
+      <main className="p-4 flex flex-col gap-5 min-h-screen justify-center">
+        <DancingIdols />
         <div className="text-center">
-          <div className="text-xs opacity-60 tracking-[0.3em]">RISE TO FAME</div>
-          <h1 className="heading mt-2 bg-gradient-to-r from-kpink to-kpurple bg-clip-text text-transparent">
+          <div className="text-[10px] opacity-60 tracking-[0.4em]">RISE TO FAME</div>
+          <h1 className="font-display text-2xl font-black mt-1 bg-gradient-to-r from-kpink to-kpurple bg-clip-text text-transparent">
             Welcome back, {user.nickname}
           </h1>
-          <div className="mt-2 text-sm opacity-80">
-            連続ログイン {user.streak} 日目 / コイン ♦ {user.coins.toLocaleString()}
+          <div className="text-[11px] opacity-70">
+            🔥 {user.streak}日連続 · ♦ {user.coins.toLocaleString()}
           </div>
         </div>
         <Link href="/home" className="btn-primary text-lg">
@@ -66,34 +68,31 @@ export default function LandingPage() {
   }
 
   return (
-    <main className="p-6 flex flex-col gap-6 min-h-screen justify-center">
-      <div className="text-center">
-        <div className="text-xs opacity-60 tracking-[0.3em]">RISE TO FAME</div>
-        <h1 className="heading mt-2 bg-gradient-to-r from-kpink to-kpurple bg-clip-text text-transparent">
-          舞台に立つのは誰だ？
+    <main className="p-4 flex flex-col gap-4 min-h-screen justify-center">
+      <DancingIdols />
+      <div className="text-center -mt-1">
+        <div className="text-[10px] opacity-60 tracking-[0.4em]">RISE TO FAME</div>
+        <h1 className="font-display text-3xl font-black mt-1 bg-gradient-to-r from-kpink to-kgold bg-clip-text text-transparent">
+          舞台に立つのは、誰だ？
         </h1>
-        <p className="opacity-80 text-sm mt-2">
-          K-Pop カルチャーを、売り出す側でも、推す側でも。
-        </p>
       </div>
-      <form onSubmit={handleSubmit} className="card flex flex-col gap-3">
-        <label className="text-sm opacity-80">ニックネーム</label>
+      <form onSubmit={handleSubmit} className="card flex flex-col gap-2">
         <input
-          className="input"
+          className="input text-center"
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
-          placeholder="例: Bias_Lover7"
+          placeholder="ニックネームを入力"
           autoFocus
         />
-        <div className="text-[11px] opacity-60">
-          8〜12文字 / 英数字 + 記号（!@#$%^&*_-. のいずれか1つ以上）/ 他ユーザーと重複不可
+        <div className="text-[10px] opacity-60 text-center">
+          8〜12文字 / 英数字 + 記号1つ
         </div>
-        {error && <div className="text-kpink text-xs">{error}</div>}
-        <button type="submit" className="btn-primary mt-1">
-          ゲームを始める
+        {error && <div className="text-kpink text-xs text-center">{error}</div>}
+        <button type="submit" className="btn-primary mt-1 text-lg">
+          ▶ START
         </button>
-        <div className="text-[11px] opacity-60 text-center">
-          登録ボーナス ♦ 500 コイン進呈
+        <div className="text-[10px] opacity-60 text-center">
+          登録で ♦500 コイン進呈
         </div>
       </form>
     </main>
