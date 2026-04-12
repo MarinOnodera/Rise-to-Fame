@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: radial-gradient(1200px 800px at 20% 0%, #2a103f 0%, #0b0614 60%),
+    radial-gradient(900px 600px at 90% 100%, #3a0a3f 0%, transparent 60%), #0b0614;
+  color: #f4ecff;
+  min-height: 100vh;
+}
+
+.card {
+  @apply rounded-2xl bg-kpanel/80 backdrop-blur p-4 border border-white/5;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 font-semibold transition active:scale-95;
+}
+
+.btn-primary {
+  @apply btn bg-gradient-to-r from-kpink to-kpurple shadow-glow text-white;
+}
+
+.btn-ghost {
+  @apply btn bg-white/5 hover:bg-white/10 text-white;
+}
+
+.btn-gold {
+  @apply btn bg-kgold text-black;
+}
+
+.chip {
+  @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs bg-white/10;
+}
+
+.heading {
+  @apply font-display text-3xl font-black tracking-tight;
+}
+
+.input {
+  @apply w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 outline-none focus:border-kpink;
+}
+
+.badge-dom {
+  background: linear-gradient(135deg, #ffd166, #ff3d8b);
+  color: #1a0a2a;
+}
+
+.avatar {
+  @apply relative inline-flex items-center justify-center rounded-full overflow-hidden;
+}
