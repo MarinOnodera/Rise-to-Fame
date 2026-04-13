@@ -65,7 +65,7 @@ export default function ProducerHome() {
           label="還元額（累積）"
           value={`¥${user.payoutEarnedJpy.toLocaleString()}`}
         />
-        <StatTile label="借入残高" value={`♦ ${user.loanBalance.toLocaleString()}`} />
+        <StatTile label="借入残高" value={`♦ ${user.loans.reduce((s, l) => s + l.remaining, 0).toLocaleString()}`} />
         <StatTile label="所属アイドル" value={`${roster.length} 名`} />
       </section>
       <section className="px-4 grid grid-cols-2 gap-3 mt-1">

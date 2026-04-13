@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  BankAccount,
   DirectMessage,
   Group,
   Idol,
@@ -14,7 +15,8 @@ import { buildDefaultWorld } from "./idols/defaults";
 import { generateIdol } from "./idols/generator";
 import { id as newId } from "./rng";
 import { dailyMessage } from "./personality";
-import { coinsToJpy, PRODUCER_SHARE } from "./economy";
+import { coinsToJpy, LOAN_OFFERS, PRODUCER_SHARE } from "./economy";
+import type { Loan } from "./types";
 
 interface State {
   initialized: boolean;
@@ -41,9 +43,9 @@ interface State {
   signIdol: (candidate: Idol, cost: number) => boolean;
   trainIdol: (idolId: string, kind: "vocal" | "dance" | "rap" | "visual" | "stamina") => boolean;
   runMarketing: (idolIds: string[], optionId: string, cost: number, popGain: number, fatigue: number) => boolean;
-  takeLoan: (amount: number) => void;
+  takeLoan: (offerId: string) => void;
   repayLoan: (amount: number) => boolean;
-  setBank: (bank: string, holder: string, last4: string) => void;
+  setBank: (bank: BankAccount) => void;
   simulateFanSpend: (jpyAmount: number, targetGroupId: string) => void;
   debutGroup: (idolIds: string[], groupName: string, concept: string) => void;
 }
@@ -74,13 +76,20 @@ export const useGame = create<State>()(
             coins: 500, // アプリ登録ボーナス
             lastLoginAt: now,
             streak: 1,
-            loanBalance: 0,
+            loans: [],
             payoutEarnedJpy: 0,
+            payoutRequestedJpy: 0,
+            payoutPaidJpy: 0,
+            concerts: [],
+            tutorialDone: false,
+            effort: 0,
+            lastEffortDecayAt: now,
             biasGroupIds: [],
             biasIdolIds: [],
             inbox: [],
             ownedGoods: {},
             tickets: [],
+            giftsSent: [],
             bankAccount: null,
             createdAt: now,
           },
@@ -357,14 +366,26 @@ export const useGame = create<State>()(
         return true;
       },
 
-      takeLoan: (amount) => {
+      takeLoan: (offerId) => {
         const u = get().user;
         if (!u) return;
+        const offer = LOAN_OFFERS.find((o) => o.id === offerId);
+        if (!offer) return;
+        const now = new Date();
+        const due = new Date(now.getTime() + offer.dueDays * 86400000);
+        const loan: Loan = {
+          id: newId("loan_"),
+          offerId: offer.id,
+          principal: offer.amount,
+          remaining: offer.totalDue,
+          takenAt: now.toISOString(),
+          dueAt: due.toISOString(),
+        };
         set({
           user: {
             ...u,
-            coins: u.coins + amount,
-            loanBalance: u.loanBalance + amount,
+            coins: u.coins + offer.amount,
+            loans: [...u.loans, loan],
           },
         });
       },
@@ -372,22 +393,32 @@ export const useGame = create<State>()(
       repayLoan: (amount) => {
         const u = get().user;
         if (!u) return false;
-        const pay = Math.min(amount, u.loanBalance, u.coins);
+        const totalRemaining = u.loans.reduce((s, l) => s + l.remaining, 0);
+        const pay = Math.min(amount, totalRemaining, u.coins);
         if (pay <= 0) return false;
+        let left = pay;
+        const loans = u.loans
+          .map((l) => {
+            if (left <= 0) return l;
+            const take = Math.min(l.remaining, left);
+            left -= take;
+            return { ...l, remaining: l.remaining - take };
+          })
+          .filter((l) => l.remaining > 0);
         set({
           user: {
             ...u,
             coins: u.coins - pay,
-            loanBalance: u.loanBalance - pay,
+            loans,
           },
         });
         return true;
       },
 
-      setBank: (bank, holder, last4) => {
+      setBank: (bank) => {
         const u = get().user;
         if (!u) return;
-        set({ user: { ...u, bankAccount: { bank, holder, last4 } } });
+        set({ user: { ...u, bankAccount: bank } });
       },
 
       simulateFanSpend: (jpyAmount, _targetGroupId) => {
@@ -415,6 +446,7 @@ export const useGame = create<State>()(
           agencyId: u.agencyId,
           memberIds: [...idolIds],
           popularity: 10,
+          fanCount: 0,
           dominant: false,
           concept,
           colorA: "#ff3d8b",
@@ -429,7 +461,49 @@ export const useGame = create<State>()(
     }),
     {
       name: "rise-to-fame-v2",
-      version: 2,
+      version: 3,
+      // 既存のアイドル/グループ/ユーザーデータを失わないよう、スキーマ拡張時はdefault値を注入する
+      migrate: (persistedState: unknown, fromVersion: number) => {
+        const s = (persistedState ?? {}) as Record<string, unknown>;
+        const user = (s.user ?? null) as Record<string, unknown> | null;
+        if (user) {
+          const now = new Date().toISOString();
+          if (!("loans" in user)) user.loans = [];
+          if (!("payoutRequestedJpy" in user)) user.payoutRequestedJpy = 0;
+          if (!("payoutPaidJpy" in user)) user.payoutPaidJpy = 0;
+          if (!("concerts" in user)) user.concerts = [];
+          if (!("tutorialDone" in user)) user.tutorialDone = false;
+          if (!("effort" in user)) user.effort = 0;
+          if (!("lastEffortDecayAt" in user)) user.lastEffortDecayAt = now;
+          if (!("giftsSent" in user)) user.giftsSent = [];
+          if (!("bankAccount" in user) || !user.bankAccount) user.bankAccount = null;
+          // 旧loanBalanceがあれば1件の借入に変換
+          if ("loanBalance" in user && typeof user.loanBalance === "number" && user.loanBalance > 0) {
+            const lb = user.loanBalance as number;
+            (user.loans as unknown[]).push({
+              id: `loan_legacy_${Date.now()}`,
+              offerId: "legacy",
+              principal: lb,
+              remaining: lb,
+              takenAt: now,
+              dueAt: new Date(Date.now() + 14 * 86400000).toISOString(),
+            });
+            delete user.loanBalance;
+          }
+          if (!("createdAt" in user)) user.createdAt = now;
+        }
+        // groupsにfanCountが無ければ既存人気度から推定
+        const groups = (s.groups ?? []) as Array<Record<string, unknown>>;
+        for (const g of groups) {
+          if (typeof g.fanCount !== "number") {
+            const pop = typeof g.popularity === "number" ? (g.popularity as number) : 30;
+            g.fanCount = Math.floor(pop * 30);
+          }
+        }
+        if (!("ads" in s)) s.ads = [];
+        void fromVersion;
+        return s as unknown;
+      },
     }
   )
 );

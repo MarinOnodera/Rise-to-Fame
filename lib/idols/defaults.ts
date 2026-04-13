@@ -87,12 +87,17 @@ export function buildDefaultWorld(): {
       members.push(idol.id);
       idols.push(idol);
     }
+    // dominantは圧倒的なファン数、普通は中規模〜大規模進出可能水準
+    const fanCount = s.dominant
+      ? 6000 + Math.floor(Math.random() * 3000)
+      : 800 + Math.floor(Math.random() * 1500);
     groups.push({
       id: s.id,
       name: s.name,
       gender: s.gender,
       memberIds: members,
       popularity: s.dominant ? 92 : 60 + Math.floor(Math.random() * 20),
+      fanCount,
       dominant: s.dominant,
       concept: s.concept,
       colorA: s.colorA,
@@ -203,6 +208,51 @@ export function buildDefaultWorld(): {
       placement: "bus",
       colorA: "#7b2cff",
       colorB: "#ff3d8b",
+    },
+    // ==== 空きスロット（プロデューサーが購入可能） ====
+    {
+      id: "slot_billboard_1",
+      kind: "variety",
+      brand: "EMPTY",
+      product: "空きスロット",
+      x: 0.24,
+      placement: "billboard",
+      colorA: "#222",
+      colorB: "#444",
+      empty: true,
+    },
+    {
+      id: "slot_billboard_2",
+      kind: "variety",
+      brand: "EMPTY",
+      product: "空きスロット",
+      x: 0.6,
+      placement: "billboard",
+      colorA: "#222",
+      colorB: "#444",
+      empty: true,
+    },
+    {
+      id: "slot_shop_1",
+      kind: "variety",
+      brand: "EMPTY",
+      product: "空きスロット",
+      x: 0.36,
+      placement: "shop",
+      colorA: "#333",
+      colorB: "#555",
+      empty: true,
+    },
+    {
+      id: "slot_bus_1",
+      kind: "variety",
+      brand: "EMPTY",
+      product: "空きスロット",
+      x: 0.5,
+      placement: "bus",
+      colorA: "#333",
+      colorB: "#555",
+      empty: true,
     },
   ];
 
