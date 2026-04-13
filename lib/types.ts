@@ -183,6 +183,8 @@ export interface UserProfile {
   tickets: string[];
   giftsSent: GiftRecord[];
   createdAt: string;
+  // ユーザー自身のアバター (LA街で遊ぶ自分)。未設定なら null。
+  avatar?: UserAvatar | null;
 }
 
 export interface GiftItem {
@@ -210,6 +212,99 @@ export interface DirectMessage {
   at: string;
   text: string;
   read: boolean;
+}
+
+// ====== ユーザーアバター (LAサイバーパンク街で遊ぶ自分) ======
+// 既存の FaceSeed/Idol 系は壊さず、ユーザー向けは別系統として追加する。
+
+export type AvatarCategory =
+  | "hair"
+  | "eyes"
+  | "outfit"
+  | "accessory"
+  | "background"
+  | "pose";
+
+// 各パーツカテゴリが取りうる値 (文字列IDの一覧)。
+// SVG レンダラー側で enum を解釈して合成する。
+export type AvatarHair =
+  | "long-straight"
+  | "long-wave"
+  | "bob"
+  | "ponytail"
+  | "short-crop"
+  | "undercut"
+  | "twin-buns"
+  | "half-up"
+  | "mohawk-fade";
+
+export type AvatarEyes =
+  | "almond"
+  | "round"
+  | "sharp"
+  | "droopy"
+  | "cat"
+  | "wide";
+
+export type AvatarOutfit =
+  | "crop-jacket"
+  | "oversize-hoodie"
+  | "neon-mesh"
+  | "stage-corset"
+  | "streetwear"
+  | "holo-puffer"
+  | "leather-fit"
+  | "cyber-kimono";
+
+// ★ 新規カテゴリ: アクセサリー (アイウェア / イヤリング / チョーカー 等)
+export type AvatarAccessory =
+  | "none"
+  | "cyber-visor"
+  | "neon-shades"
+  | "hologram-earring"
+  | "choker-led"
+  | "face-decal"
+  | "halo-ring";
+
+// ★ 新規カテゴリ: 背景シーン (LA × K-Pop × サイバーパンク)
+export type AvatarBackground =
+  | "la-sunset-blvd"   // 夕焼けのSunset Blvd。椰子並木、開放感
+  | "dtla-neon"        // ダウンタウンLA、ネオン看板乱立
+  | "venice-boardwalk" // Venice Beach風、海とパステル空
+  | "hollywood-sign"   // ハリウッドサイン、広い空
+  | "k-town-night"     // コリアタウンのハングルネオン
+  | "rooftop-skyline"; // ルーフトップからのスカイライン
+
+export type AvatarPose =
+  | "idle"
+  | "hand-on-hip"
+  | "peace-sign"
+  | "walking"
+  | "mic-stand";
+
+// ユーザーが作ったアバター本体。
+// writeupModeとして "ai" (写真からClaudeが生成) / "manual" (パーツ選択) の2通り。
+export interface UserAvatar {
+  id: string;
+  source: "ai" | "manual";
+  // 色相0..360 (ルック調整用)。任意。
+  skinHue: number;
+  hairHue: number;
+  eyeHue: number;
+  lipHue: number;
+  outfitHueA: number; // グラデ用2色
+  outfitHueB: number;
+  parts: {
+    hair: AvatarHair;
+    eyes: AvatarEyes;
+    outfit: AvatarOutfit;
+    accessory: AvatarAccessory;
+    background: AvatarBackground;
+    pose: AvatarPose;
+  };
+  // AI 生成時、Claude が推測した印象メモ (UI のコメント表示用)。
+  vibe?: string;
+  createdAt: string;
 }
 
 export interface AuditionCandidate extends Idol {

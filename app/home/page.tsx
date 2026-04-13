@@ -127,6 +127,11 @@ export default function HomePage() {
           <div className="font-bold">コイン購入</div>
           <div className="text-[11px] opacity-70">課金でコイン追加</div>
         </Link>
+        <Link href="/avatar" className="card text-center">
+          <div className="text-2xl">🪞</div>
+          <div className="font-bold">アバター工房</div>
+          <div className="text-[11px] opacity-70">写真 / パーツで作る</div>
+        </Link>
         <Link href="/settings" className="card text-center">
           <div className="text-2xl">⚙</div>
           <div className="font-bold">設定</div>

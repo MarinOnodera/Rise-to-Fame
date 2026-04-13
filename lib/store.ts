@@ -10,6 +10,7 @@ import type {
   UserMode,
   UserProfile,
   CityAd,
+  UserAvatar,
 } from "./types";
 import { buildDefaultWorld } from "./idols/defaults";
 import { generateIdol } from "./idols/generator";
@@ -38,6 +39,7 @@ interface State {
   initWorld: () => void;
   registerUser: (nickname: string, displayName: string) => void;
   setDisplayName: (name: string) => void;
+  setAvatar: (avatar: UserAvatar | null) => void;
   setMode: (mode: UserMode) => void;
   completeTutorial: () => void;
   applyDailyLogin: () => void;
@@ -126,6 +128,7 @@ export const useGame = create<State>()(
             giftsSent: [],
             bankAccount: null,
             createdAt: now,
+            avatar: null,
           },
         });
       },
@@ -140,6 +143,12 @@ export const useGame = create<State>()(
         const u = get().user;
         if (!u) return;
         set({ user: { ...u, displayName: name } });
+      },
+
+      setAvatar: (avatar) => {
+        const u = get().user;
+        if (!u) return;
+        set({ user: { ...u, avatar } });
       },
 
       completeTutorial: () => {
@@ -803,7 +812,7 @@ export const useGame = create<State>()(
     }),
     {
       name: "rise-to-fame-v2",
-      version: 4,
+      version: 5,
       // 既存のアイドル/グループ/ユーザーデータを失わないよう、スキーマ拡張時はdefault値を注入する。
       // 重要: ここでエラーを投げると state がリセットされ、再ログイン画面に戻ってしまう。
       // どんな形式でも落ちずに足りない field を埋めるスタンスで実装する。
@@ -822,6 +831,7 @@ export const useGame = create<State>()(
             if (typeof user.lastEffortDecayAt !== "string") user.lastEffortDecayAt = now;
             if (!Array.isArray(user.giftsSent)) user.giftsSent = [];
             if (!user.bankAccount) user.bankAccount = null;
+            if (!("avatar" in user)) user.avatar = null;
             if (typeof user.createdAt !== "string") user.createdAt = now;
             if (typeof user.displayName !== "string" || !user.displayName) {
               user.displayName = (user.nickname as string) ?? "";
