@@ -1,0 +1,81 @@
+"use client";
+
+import { useState } from "react";
+import { useGame } from "@/lib/store";
+
+const STEPS: Array<{ emoji: string; title: string; body: string }> = [
+  {
+    emoji: "🌆",
+    title: "ようこそ Seoul へ",
+    body: "あなたは街を歩きながら、推しアイドルを見つけたり、自分の事務所を立ち上げたりできます。",
+  },
+  {
+    emoji: "💖",
+    title: "ファンモード",
+    body: "最大3グループ・5人まで推せます。毎日AIが書くDMが届き、グッズやチケットを買って応援できます。贈り物も10段階！",
+  },
+  {
+    emoji: "🎬",
+    title: "プロデューサーモード",
+    body: "事務所を設立し、オーディション/スカウトでアイドルを契約。ハンコ演出で契約成立！育成→グループ結成→デビュー。",
+  },
+  {
+    emoji: "🎪",
+    title: "コンサート & 広告",
+    body: "ファン数に応じて4段階のコンサートを開催できます (50/500/1000/5000人)。街の広告スロットも購入可能。",
+  },
+  {
+    emoji: "♦",
+    title: "コインとお金",
+    body: "コインはApp Storeで購入。ファン課金の20%は所属事務所に還元され、登録した銀行口座へ振込されます（プロトタイプは模擬）。",
+  },
+];
+
+export function Tutorial({
+  onFinish,
+}: {
+  onFinish: () => void;
+}) {
+  const { user } = useGame();
+  const [step, setStep] = useState(0);
+  if (!user || user.tutorialDone) return null;
+
+  const s = STEPS[step];
+  const last = step === STEPS.length - 1;
+
+  return (
+    <div className="fixed inset-0 z-[700] bg-black/85 backdrop-blur flex items-center justify-center">
+      <div className="w-[320px] bg-kpanel rounded-3xl p-6 border border-white/10">
+        <div className="text-5xl text-center">{s.emoji}</div>
+        <div className="text-lg font-black text-center mt-2">{s.title}</div>
+        <div className="text-sm opacity-80 mt-3 leading-6">{s.body}</div>
+
+        <div className="flex justify-center gap-1 mt-4">
+          {STEPS.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1 w-6 rounded-full ${
+                i === step ? "bg-kpink" : "bg-white/20"
+              }`}
+            />
+          ))}
+        </div>
+
+        <div className="flex gap-2 mt-4">
+          <button className="btn-ghost flex-1" onClick={onFinish}>
+            スキップ
+          </button>
+          <button
+            className="btn-primary flex-1"
+            onClick={() => {
+              if (last) onFinish();
+              else setStep(step + 1);
+            }}
+          >
+            {last ? "ゲームを始める" : "次へ"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

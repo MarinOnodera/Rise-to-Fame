@@ -7,10 +7,11 @@ import { useGame } from "@/lib/store";
 import { TopBar } from "@/components/TopBar";
 import { StreetScene } from "@/components/StreetScene";
 import { GroupCard } from "@/components/GroupCard";
+import { Tutorial } from "@/components/Tutorial";
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, groups, setMode, toggleBiasGroup, deliverDailyMessages } =
+  const { user, groups, setMode, toggleBiasGroup, deliverDailyMessages, completeTutorial } =
     useGame();
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function HomePage() {
   return (
     <main className="pb-24">
       <TopBar title="Seoul Street" />
+      {!user.tutorialDone && <Tutorial onFinish={completeTutorial} />}
 
       {/* Dual CTAs */}
       <section className="px-4 mt-4 grid grid-cols-2 gap-3">

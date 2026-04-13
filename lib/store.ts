@@ -15,8 +15,15 @@ import { buildDefaultWorld } from "./idols/defaults";
 import { generateIdol } from "./idols/generator";
 import { id as newId } from "./rng";
 import { dailyMessage } from "./personality";
-import { coinsToJpy, LOAN_OFFERS, PRODUCER_SHARE } from "./economy";
-import type { Loan } from "./types";
+import {
+  CONCERT_TIERS,
+  coinsToJpy,
+  GIFTS,
+  LOAN_OFFERS,
+  PRODUCER_SHARE,
+} from "./economy";
+import type { AuditionCandidate, Loan } from "./types";
+import { contractSuccessRate } from "./contracts";
 
 interface State {
   initialized: boolean;
@@ -28,6 +35,7 @@ interface State {
   initWorld: () => void;
   registerUser: (nickname: string) => void;
   setMode: (mode: UserMode) => void;
+  completeTutorial: () => void;
   applyDailyLogin: () => void;
   addCoins: (n: number) => void;
   spendCoins: (n: number) => boolean;
@@ -36,11 +44,15 @@ interface State {
   toggleBiasIdol: (idolId: string) => { ok: boolean; reason?: string };
   buyGoods: (goodsId: string, coins: number) => boolean;
   buyTicket: (tierId: string, coins: number, groupId: string) => boolean;
+  sendGift: (giftId: string, idolId: string) => { ok: boolean; reason?: string };
   deliverDailyMessages: () => Promise<void>;
   markRead: (msgId: string) => void;
   // producer
   createAgency: (name: string) => void;
-  signIdol: (candidate: Idol, cost: number) => boolean;
+  signIdol: (
+    candidate: AuditionCandidate,
+    kind: "audition" | "scout"
+  ) => { paid: boolean; success: boolean; rate: number };
   trainIdol: (idolId: string, kind: "vocal" | "dance" | "rap" | "visual" | "stamina") => boolean;
   runMarketing: (idolIds: string[], optionId: string, cost: number, popGain: number, fatigue: number) => boolean;
   takeLoan: (offerId: string) => void;
@@ -48,6 +60,10 @@ interface State {
   setBank: (bank: BankAccount) => void;
   simulateFanSpend: (jpyAmount: number, targetGroupId: string) => void;
   debutGroup: (idolIds: string[], groupName: string, concept: string) => void;
+  holdConcert: (
+    groupId: string,
+    tier: "local" | "mid" | "large" | "solo"
+  ) => { ok: boolean; reason?: string; revenueCoins?: number };
 }
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
@@ -100,6 +116,12 @@ export const useGame = create<State>()(
         const u = get().user;
         if (!u) return;
         set({ user: { ...u, mode } });
+      },
+
+      completeTutorial: () => {
+        const u = get().user;
+        if (!u) return;
+        set({ user: { ...u, tutorialDone: true } });
       },
 
       applyDailyLogin: () => {
@@ -178,6 +200,42 @@ export const useGame = create<State>()(
         // 購入額の20%を該当アイドル所属グループのオーナーに還元（この場でシミュレート）
         get().simulateFanSpend(coinsToJpy(coins), ""); // グループ未指定時は集計のみ
         return true;
+      },
+
+      sendGift: (giftId, idolId) => {
+        const u = get().user;
+        if (!u) return { ok: false, reason: "未ログイン" };
+        const gift = GIFTS.find((g) => g.id === giftId);
+        if (!gift) return { ok: false, reason: "ギフトが無効" };
+        if (u.coins < gift.coins) return { ok: false, reason: "コインが足りません" };
+        const idol = get().idols.find((i) => i.id === idolId);
+        if (!idol) return { ok: false, reason: "アイドルが見つかりません" };
+        const idols = get().idols.map((i) =>
+          i.id === idolId
+            ? { ...i, popularity: Math.min(100, i.popularity + gift.popGain) }
+            : i
+        );
+        const record = {
+          id: newId("gft_"),
+          giftId: gift.id,
+          idolId,
+          groupId: idol.groupId,
+          at: new Date().toISOString(),
+          coins: gift.coins,
+        };
+        set({
+          user: {
+            ...u,
+            coins: u.coins - gift.coins,
+            giftsSent: [record, ...u.giftsSent],
+          },
+          idols,
+        });
+        // プレゼントは所属事務所に20%還元
+        if (idol.groupId) {
+          get().simulateFanSpend(coinsToJpy(gift.coins), idol.groupId);
+        }
+        return { ok: true };
       },
 
       buyTicket: (tierId, coins, groupId) => {
@@ -303,22 +361,34 @@ export const useGame = create<State>()(
         });
       },
 
-      signIdol: (candidate, cost) => {
+      signIdol: (candidate, kind) => {
         const u = get().user;
-        if (!u || !u.agencyId) return false;
-        if (u.coins < cost) return false;
-        const idol: Idol = {
-          ...candidate,
-          id: newId("idol_"),
-          ownerId: u.agencyId,
-          debuted: false,
-          popularity: 5,
-        };
-        set({
-          user: { ...u, coins: u.coins - cost },
-          idols: [...get().idols, idol],
-        });
-        return true;
+        if (!u || !u.agencyId) return { paid: false, success: false, rate: 0 };
+        const cost = candidate.cost;
+        if (u.coins < cost) return { paid: false, success: false, rate: 0 };
+        const rate = contractSuccessRate(candidate.auditionScore, kind, u.effort);
+        const success = Math.random() < rate;
+        // 失敗時も契約料の半分は接待/諸経費として消失
+        const paidCost = success ? cost : Math.floor(cost * 0.4);
+        const effortGain = success ? 5 : 3;
+        if (success) {
+          const idol: Idol = {
+            ...candidate,
+            id: newId("idol_"),
+            ownerId: u.agencyId,
+            debuted: false,
+            popularity: 5,
+          };
+          set({
+            user: { ...u, coins: u.coins - paidCost, effort: u.effort + effortGain },
+            idols: [...get().idols, idol],
+          });
+        } else {
+          set({
+            user: { ...u, coins: u.coins - paidCost, effort: u.effort + effortGain },
+          });
+        }
+        return { paid: true, success, rate };
       },
 
       trainIdol: (idolId, kind) => {
@@ -457,6 +527,66 @@ export const useGame = create<State>()(
           idolIds.includes(i.id) ? { ...i, groupId: gid, debuted: true } : i
         );
         set({ groups: [...get().groups, group], idols });
+      },
+
+      holdConcert: (groupId, tier) => {
+        const u = get().user;
+        if (!u || !u.agencyId) return { ok: false, reason: "事務所がありません" };
+        const group = get().groups.find((g) => g.id === groupId);
+        if (!group) return { ok: false, reason: "グループが見つかりません" };
+        if (group.agencyId !== u.agencyId)
+          return { ok: false, reason: "自分のグループではありません" };
+        const def = CONCERT_TIERS.find((t) => t.tier === tier);
+        if (!def) return { ok: false, reason: "ティアが不正" };
+        if (group.fanCount < def.minFans)
+          return {
+            ok: false,
+            reason: `ファン ${def.minFans.toLocaleString()} 人必要`,
+          };
+        if (u.coins < def.cost)
+          return { ok: false, reason: "コインが足りません" };
+        // 収益は baseRevenue + fan比例
+        const fanBoost = Math.min(2.0, group.fanCount / (def.minFans * 3));
+        const revenueCoins = Math.floor(def.baseRevenueCoins * (0.9 + fanBoost * 0.6));
+        const attendance = Math.min(group.fanCount, def.minFans * 2);
+
+        const groups = get().groups.map((g) =>
+          g.id === groupId
+            ? {
+                ...g,
+                popularity: Math.min(100, g.popularity + def.popGain),
+                fanCount: g.fanCount + Math.floor(def.popGain * 40),
+              }
+            : g
+        );
+        const idols = get().idols.map((i) =>
+          i.groupId === groupId
+            ? {
+                ...i,
+                fatigue: Math.min(100, i.fatigue + def.fatigue),
+                popularity: Math.min(100, i.popularity + Math.ceil(def.popGain / 2)),
+              }
+            : i
+        );
+        const record = {
+          id: newId("cnc_"),
+          groupId,
+          tier,
+          heldAt: new Date().toISOString(),
+          attendance,
+          revenueCoins,
+        };
+        set({
+          groups,
+          idols,
+          user: {
+            ...u,
+            coins: u.coins - def.cost + revenueCoins,
+            effort: u.effort + 8,
+            concerts: [record, ...u.concerts],
+          },
+        });
+        return { ok: true, revenueCoins };
       },
     }),
     {
