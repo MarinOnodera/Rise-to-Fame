@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { useGame } from "@/lib/store";
 import { TopBar } from "@/components/TopBar";
 import { IdolFace } from "@/components/IdolFace";
+import { GiftModal } from "@/components/GiftModal";
 
 export default function MessagesPage() {
   const router = useRouter();
   const { user, idols, markRead, deliverDailyMessages } = useGame();
   const [loading, setLoading] = useState(false);
+  const [giftIdol, setGiftIdol] = useState<null | { id: string; name: string }>(null);
 
   useEffect(() => {
     if (!user) {
@@ -84,11 +86,32 @@ export default function MessagesPage() {
                   <div className="mt-1 text-sm whitespace-pre-line leading-relaxed">
                     {m.text.replace(/^\[.+?\]\n/, "")}
                   </div>
+                  {idol && (
+                    <div className="mt-2">
+                      <span
+                        className="chip !text-[10px]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setGiftIdol({ id: idol.id, name: idol.stageName });
+                        }}
+                      >
+                        🎁 返信にギフトを贈る
+                      </span>
+                    </div>
+                  )}
                 </div>
               </button>
             );
           })}
         </div>
+
+        {giftIdol && (
+          <GiftModal
+            idolId={giftIdol.id}
+            idolName={giftIdol.name}
+            onClose={() => setGiftIdol(null)}
+          />
+        )}
 
         <button
           className="btn-ghost w-full mt-4 text-sm"

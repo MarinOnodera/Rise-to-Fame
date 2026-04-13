@@ -16,6 +16,8 @@ import { generateIdol } from "./idols/generator";
 import { id as newId } from "./rng";
 import { dailyMessage } from "./personality";
 import {
+  AD_DURATION_DAYS,
+  AD_SLOT_PRICES,
   CONCERT_TIERS,
   coinsToJpy,
   GIFTS,
@@ -64,6 +66,13 @@ interface State {
     groupId: string,
     tier: "local" | "mid" | "large" | "solo"
   ) => { ok: boolean; reason?: string; revenueCoins?: number };
+  buyAdSlot: (
+    adId: string,
+    promoteGroupId: string,
+    brand: string,
+    product: string,
+    tagline: string
+  ) => { ok: boolean; reason?: string };
 }
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
@@ -527,6 +536,47 @@ export const useGame = create<State>()(
           idolIds.includes(i.id) ? { ...i, groupId: gid, debuted: true } : i
         );
         set({ groups: [...get().groups, group], idols });
+      },
+
+      buyAdSlot: (adId, promoteGroupId, brand, product, tagline) => {
+        const u = get().user;
+        if (!u || !u.agencyId) return { ok: false, reason: "事務所がありません" };
+        const ad = get().ads.find((a) => a.id === adId);
+        if (!ad) return { ok: false, reason: "広告が見つかりません" };
+        if (!ad.empty) return { ok: false, reason: "既に埋まっています" };
+        const price = AD_SLOT_PRICES[ad.placement];
+        if (u.coins < price) return { ok: false, reason: "コインが足りません" };
+        const group = get().groups.find((g) => g.id === promoteGroupId);
+        if (!group || group.agencyId !== u.agencyId)
+          return { ok: false, reason: "自分のグループを指定してください" };
+        const endorser = get().idols.find(
+          (i) => i.groupId === promoteGroupId && i.debuted
+        );
+        const expiresAt = new Date(
+          Date.now() + AD_DURATION_DAYS * 86400000
+        ).toISOString();
+        const ads = get().ads.map((a) =>
+          a.id === adId
+            ? {
+                ...a,
+                brand,
+                product,
+                tagline,
+                colorA: group.colorA,
+                colorB: group.colorB,
+                empty: false,
+                ownerAgencyId: u.agencyId,
+                promoteGroupId,
+                endorserIdolId: endorser?.id,
+                expiresAt,
+              }
+            : a
+        );
+        set({
+          ads,
+          user: { ...u, coins: u.coins - price },
+        });
+        return { ok: true };
       },
 
       holdConcert: (groupId, tier) => {

@@ -76,6 +76,7 @@ export default function ProducerHome() {
         <Tile href="/producer/finance" emoji="🏦" title="ファイナンス" desc="融資 / 還元口座" />
         <Tile href="/producer/debut" emoji="🚀" title="グループ結成" desc="デビューさせる" />
         <Tile href="/producer/concerts" emoji="🎪" title="コンサート" desc="4段階でライブ開催" />
+        <Tile href="/producer/ads" emoji="🏙" title="広告スロット" desc="街に広告を出す" />
       </section>
       <section className="px-4 mt-5">
         <div className="flex items-center justify-between mb-2">
