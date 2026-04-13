@@ -38,7 +38,7 @@ export default function MessagesPage() {
         {loading && inbox.length === 0 && (
           <div className="card flex items-center gap-2 text-sm">
             <span className="inline-block w-2 h-2 bg-kpink rounded-full animate-bounce" />
-            <span>推しが下書き中…</span>
+            <span>推しからの新着を確認中…</span>
           </div>
         )}
 
@@ -125,7 +125,7 @@ export default function MessagesPage() {
           {loading ? "取得中…" : "↻ 新着を確認"}
         </button>
         <div className="text-[10px] opacity-50 text-center mt-2">
-          内容はAIが推しの性格から毎日書き下ろしています
+          推しがあなたに直接メッセージを送っています
         </div>
       </div>
     </main>

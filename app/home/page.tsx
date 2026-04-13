@@ -11,16 +11,24 @@ import { Tutorial } from "@/components/Tutorial";
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, groups, setMode, toggleBiasGroup, deliverDailyMessages, completeTutorial } =
-    useGame();
+  const {
+    user,
+    groups,
+    setMode,
+    toggleBiasGroup,
+    deliverDailyMessages,
+    tickIdolPosts,
+    completeTutorial,
+  } = useGame();
 
   useEffect(() => {
     if (!user) router.replace("/");
     else {
       if (user.mode === null) setMode("fan"); // デフォルトはファン側
       void deliverDailyMessages();
+      void tickIdolPosts();
     }
-  }, [user, router, setMode, deliverDailyMessages]);
+  }, [user, router, setMode, deliverDailyMessages, tickIdolPosts]);
 
   if (!user) return null;
 
@@ -96,6 +104,11 @@ export default function HomePage() {
           <div className="text-2xl">💗</div>
           <div className="font-bold">ファン ホーム</div>
           <div className="text-[11px] opacity-70">推しと会いに行く</div>
+        </Link>
+        <Link href="/fan/feed" className="card text-center">
+          <div className="text-2xl">📱</div>
+          <div className="font-bold">フィード</div>
+          <div className="text-[11px] opacity-70">推しの投稿・ライブ</div>
         </Link>
         <Link href="/fan/messages" className="card text-center relative">
           <div className="text-2xl">✉</div>

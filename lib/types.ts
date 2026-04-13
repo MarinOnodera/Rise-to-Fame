@@ -157,6 +157,7 @@ export type UserMode = "fan" | "producer" | null;
 
 export interface UserProfile {
   nickname: string;
+  displayName: string; // 推しが呼んでくれる名前。言語自由（ユーザー本名/あだ名）
   mode: UserMode;
   coins: number;
   lastLoginAt: string; // ISO
@@ -214,4 +215,32 @@ export interface DirectMessage {
 export interface AuditionCandidate extends Idol {
   auditionScore: number;
   cost: number;
+}
+
+// アイドルがSNS風に投稿するコンテンツ。Instagram風の1日1〜2件。
+// プロデューサーが承認してから公開される（approved === true で fan に見える）。
+export type PostKind = "selfie" | "scenery" | "snap" | "stage" | "studio" | "live";
+
+export interface IdolPost {
+  id: string;
+  idolId: string;
+  groupId?: string;
+  kind: PostKind;
+  caption: string; // AIが性格と状況から生成
+  at: string; // 作成時刻（承認は別時刻）
+  // ダミーのビジュアル生成用シード（SVGでグラデ+絵文字+ノイズ）
+  imageSeed: number;
+  palette: [string, string];
+  emoji: string;
+  // 承認状態:
+  //  - null: プロデューサー確認待ち (pending)
+  //  - true: 承認済み → fan feed に掲載
+  //  - false: 却下 (表示しない)
+  // 推しが自分で投稿している体にしたいので、事務所所属でなければ自動承認(true)。
+  approved: boolean | null;
+  approvedAt?: string;
+  // live: 生放送の場合は終了時間
+  liveUntil?: string;
+  likes: number;
+  likedByUser?: boolean;
 }

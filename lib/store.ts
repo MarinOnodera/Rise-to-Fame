@@ -24,7 +24,7 @@ import {
   LOAN_OFFERS,
   PRODUCER_SHARE,
 } from "./economy";
-import type { AuditionCandidate, Loan } from "./types";
+import type { AuditionCandidate, IdolPost, Loan, PostKind } from "./types";
 import { contractSuccessRate } from "./contracts";
 
 interface State {
@@ -33,9 +33,11 @@ interface State {
   groups: Group[];
   idols: Idol[];
   ads: CityAd[];
+  posts: IdolPost[];
   // actions
   initWorld: () => void;
-  registerUser: (nickname: string) => void;
+  registerUser: (nickname: string, displayName: string) => void;
+  setDisplayName: (name: string) => void;
   setMode: (mode: UserMode) => void;
   completeTutorial: () => void;
   applyDailyLogin: () => void;
@@ -73,6 +75,11 @@ interface State {
     product: string,
     tagline: string
   ) => { ok: boolean; reason?: string };
+  // SNS / 配信
+  tickIdolPosts: () => Promise<void>; // 1日1〜2投稿の候補生成
+  approvePost: (postId: string, approved: boolean) => void;
+  goLive: (idolId: string, minutes: number) => { ok: boolean; reason?: string };
+  likePost: (postId: string) => void;
 }
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
@@ -85,6 +92,7 @@ export const useGame = create<State>()(
       groups: [],
       idols: [],
       ads: [],
+      posts: [],
 
       initWorld: () => {
         if (get().initialized) return;
@@ -92,11 +100,12 @@ export const useGame = create<State>()(
         set({ groups, idols, ads, initialized: true });
       },
 
-      registerUser: (nickname) => {
+      registerUser: (nickname, displayName) => {
         const now = new Date().toISOString();
         set({
           user: {
             nickname,
+            displayName,
             mode: null,
             coins: 500, // アプリ登録ボーナス
             lastLoginAt: now,
@@ -125,6 +134,12 @@ export const useGame = create<State>()(
         const u = get().user;
         if (!u) return;
         set({ user: { ...u, mode } });
+      },
+
+      setDisplayName: (name) => {
+        const u = get().user;
+        if (!u) return;
+        set({ user: { ...u, displayName: name } });
       },
 
       completeTutorial: () => {
@@ -307,7 +322,7 @@ export const useGame = create<State>()(
                     personality: idol.personality,
                     bioSeed: idol.bioSeed,
                   },
-                  fanNickname: u.nickname,
+                  fanNickname: u.displayName || u.nickname,
                   date: today,
                   previousSnippet: prevSnippet,
                 }),
@@ -325,7 +340,7 @@ export const useGame = create<State>()(
               text = dailyMessage(
                 idol.stageName,
                 idol.personality,
-                u.nickname,
+                u.displayName || u.nickname,
                 seed
               );
             }
@@ -538,6 +553,153 @@ export const useGame = create<State>()(
         set({ groups: [...get().groups, group], idols });
       },
 
+      tickIdolPosts: async () => {
+        const state = get();
+        const u = state.user;
+        if (!u) return;
+        const todayKeyStr = todayKey();
+        // 既に今日の投稿が存在するアイドル
+        const postedTodayBy = new Set(
+          state.posts
+            .filter((p) => p.at.slice(0, 10) === todayKeyStr)
+            .map((p) => p.idolId)
+        );
+        const candidates = state.idols.filter(
+          (i) => i.debuted && !postedTodayBy.has(i.id)
+        );
+        // 1人あたり 1〜2 件
+        const KINDS: PostKind[] = ["selfie", "scenery", "snap", "stage", "studio"];
+        const EMOJIS: Record<PostKind, string[]> = {
+          selfie: ["📸", "💖", "✨", "🤳", "🌸"],
+          scenery: ["🌆", "🌃", "🌊", "🌷", "☕"],
+          snap: ["🍡", "🍰", "🍿", "🍙", "🍒"],
+          stage: ["🎤", "🎶", "🔥", "💫", "⚡"],
+          studio: ["🎧", "🎹", "📝", "🪩", "🎛"],
+          live: ["🔴", "💬", "🎥", "📡", "💗"],
+        };
+        const newPosts: IdolPost[] = [];
+        for (const idol of candidates) {
+          const count = 1 + (Math.random() < 0.4 ? 1 : 0);
+          const prev = state.posts.find((p) => p.idolId === idol.id)?.caption;
+          for (let i = 0; i < count; i++) {
+            const kind = KINDS[Math.floor(Math.random() * KINDS.length)];
+            let caption = "";
+            try {
+              const r = await fetch("/api/idol-post", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  idol: {
+                    stageName: idol.stageName,
+                    country: idol.country,
+                    personality: idol.personality,
+                    age: idol.age,
+                    bioSeed: idol.bioSeed,
+                  },
+                  kind,
+                  previousCaption: prev,
+                  fanName: u.displayName || u.nickname,
+                }),
+              });
+              if (r.ok) {
+                const j = (await r.json()) as { caption?: string };
+                caption = j.caption ?? "";
+              }
+            } catch {
+              // fallback
+            }
+            if (!caption) {
+              // ローカルフォールバック（言語は推しの性格から軽く色付け）
+              const ls = idol.personality.includes("cool")
+                ? ["今日はちょっと休憩。", "夜風が気持ちいい。", "自分の音を探してる。"]
+                : idol.personality.includes("bubbly")
+                ? ["きらきらな一日！みんな今日どうだった？", "ご飯おいしい〜🥺", "ふぃー楽しかった！"]
+                : ["今日もがんばってるよ。", "みんなの存在が力になる。", "いつもありがとう。"];
+              caption = ls[Math.floor(Math.random() * ls.length)];
+            }
+            const palette: [string, string] = kind === "stage"
+              ? ["#1c0033", "#ff3d8b"]
+              : kind === "scenery"
+              ? ["#8ecae6", "#ffd166"]
+              : kind === "studio"
+              ? ["#0b0620", "#7b2cff"]
+              : kind === "snap"
+              ? ["#ff8ecb", "#ffd166"]
+              : ["#ff3d8b", "#7b2cff"];
+            const emoji =
+              EMOJIS[kind][Math.floor(Math.random() * EMOJIS[kind].length)];
+            // 承認フロー: 自分の事務所のアイドルは承認待ち、それ以外は既に公開済みとして扱う
+            const isMine = idol.ownerId && idol.ownerId === u.agencyId;
+            newPosts.push({
+              id: newId("pst_"),
+              idolId: idol.id,
+              groupId: idol.groupId,
+              kind,
+              caption,
+              at: new Date().toISOString(),
+              imageSeed: Math.floor(Math.random() * 100000),
+              palette,
+              emoji,
+              approved: isMine ? null : true,
+              approvedAt: isMine ? undefined : new Date().toISOString(),
+              likes: Math.floor(Math.random() * 3000) + 120,
+            });
+          }
+        }
+        if (newPosts.length === 0) return;
+        // 最大500件で丸める
+        set({ posts: [...newPosts, ...state.posts].slice(0, 500) });
+      },
+
+      approvePost: (postId, approved) => {
+        const posts = get().posts.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                approved,
+                approvedAt: approved ? new Date().toISOString() : p.approvedAt,
+              }
+            : p
+        );
+        set({ posts });
+      },
+
+      goLive: (idolId, minutes) => {
+        const u = get().user;
+        if (!u) return { ok: false, reason: "未ログイン" };
+        const idol = get().idols.find((i) => i.id === idolId);
+        if (!idol) return { ok: false, reason: "アイドルが見つかりません" };
+        const liveUntil = new Date(Date.now() + minutes * 60000).toISOString();
+        const post: IdolPost = {
+          id: newId("pst_"),
+          idolId,
+          groupId: idol.groupId,
+          kind: "live",
+          caption: `${idol.stageName} が生配信中！`,
+          at: new Date().toISOString(),
+          imageSeed: Math.floor(Math.random() * 100000),
+          palette: ["#ff0055", "#000000"],
+          emoji: "🔴",
+          approved: true,
+          approvedAt: new Date().toISOString(),
+          liveUntil,
+          likes: 0,
+        };
+        set({ posts: [post, ...get().posts].slice(0, 500) });
+        return { ok: true };
+      },
+
+      likePost: (postId) => {
+        const posts = get().posts.map((p) =>
+          p.id === postId
+            ? p.likedByUser
+              ? { ...p, likedByUser: false, likes: Math.max(0, p.likes - 1) }
+              : { ...p, likedByUser: true, likes: p.likes + 1 }
+            : p
+        );
+        set({ posts });
+      },
+
       buyAdSlot: (adId, promoteGroupId, brand, product, tagline) => {
         const u = get().user;
         if (!u || !u.agencyId) return { ok: false, reason: "事務所がありません" };
@@ -641,48 +803,75 @@ export const useGame = create<State>()(
     }),
     {
       name: "rise-to-fame-v2",
-      version: 3,
-      // 既存のアイドル/グループ/ユーザーデータを失わないよう、スキーマ拡張時はdefault値を注入する
+      version: 4,
+      // 既存のアイドル/グループ/ユーザーデータを失わないよう、スキーマ拡張時はdefault値を注入する。
+      // 重要: ここでエラーを投げると state がリセットされ、再ログイン画面に戻ってしまう。
+      // どんな形式でも落ちずに足りない field を埋めるスタンスで実装する。
       migrate: (persistedState: unknown, fromVersion: number) => {
-        const s = (persistedState ?? {}) as Record<string, unknown>;
-        const user = (s.user ?? null) as Record<string, unknown> | null;
-        if (user) {
-          const now = new Date().toISOString();
-          if (!("loans" in user)) user.loans = [];
-          if (!("payoutRequestedJpy" in user)) user.payoutRequestedJpy = 0;
-          if (!("payoutPaidJpy" in user)) user.payoutPaidJpy = 0;
-          if (!("concerts" in user)) user.concerts = [];
-          if (!("tutorialDone" in user)) user.tutorialDone = false;
-          if (!("effort" in user)) user.effort = 0;
-          if (!("lastEffortDecayAt" in user)) user.lastEffortDecayAt = now;
-          if (!("giftsSent" in user)) user.giftsSent = [];
-          if (!("bankAccount" in user) || !user.bankAccount) user.bankAccount = null;
-          // 旧loanBalanceがあれば1件の借入に変換
-          if ("loanBalance" in user && typeof user.loanBalance === "number" && user.loanBalance > 0) {
-            const lb = user.loanBalance as number;
-            (user.loans as unknown[]).push({
-              id: `loan_legacy_${Date.now()}`,
-              offerId: "legacy",
-              principal: lb,
-              remaining: lb,
-              takenAt: now,
-              dueAt: new Date(Date.now() + 14 * 86400000).toISOString(),
-            });
-            delete user.loanBalance;
+        try {
+          const s = (persistedState ?? {}) as Record<string, unknown>;
+          const user = (s.user ?? null) as Record<string, unknown> | null;
+          if (user) {
+            const now = new Date().toISOString();
+            if (!Array.isArray(user.loans)) user.loans = [];
+            if (typeof user.payoutRequestedJpy !== "number") user.payoutRequestedJpy = 0;
+            if (typeof user.payoutPaidJpy !== "number") user.payoutPaidJpy = 0;
+            if (!Array.isArray(user.concerts)) user.concerts = [];
+            if (typeof user.tutorialDone !== "boolean") user.tutorialDone = false;
+            if (typeof user.effort !== "number") user.effort = 0;
+            if (typeof user.lastEffortDecayAt !== "string") user.lastEffortDecayAt = now;
+            if (!Array.isArray(user.giftsSent)) user.giftsSent = [];
+            if (!user.bankAccount) user.bankAccount = null;
+            if (typeof user.createdAt !== "string") user.createdAt = now;
+            if (typeof user.displayName !== "string" || !user.displayName) {
+              user.displayName = (user.nickname as string) ?? "";
+            }
+            if (!Array.isArray(user.biasGroupIds)) user.biasGroupIds = [];
+            if (!Array.isArray(user.biasIdolIds)) user.biasIdolIds = [];
+            if (!Array.isArray(user.inbox)) user.inbox = [];
+            if (!user.ownedGoods || typeof user.ownedGoods !== "object") user.ownedGoods = {};
+            if (!Array.isArray(user.tickets)) user.tickets = [];
+            if (typeof user.payoutEarnedJpy !== "number") user.payoutEarnedJpy = 0;
+            if (typeof user.streak !== "number") user.streak = 1;
+            if (typeof user.coins !== "number") user.coins = 500;
+            if (typeof user.lastLoginAt !== "string") user.lastLoginAt = now;
+            // 旧loanBalanceがあれば1件の借入に変換
+            if (
+              "loanBalance" in user &&
+              typeof user.loanBalance === "number" &&
+              (user.loanBalance as number) > 0
+            ) {
+              const lb = user.loanBalance as number;
+              (user.loans as unknown[]).push({
+                id: `loan_legacy_${Date.now()}`,
+                offerId: "legacy",
+                principal: lb,
+                remaining: lb,
+                takenAt: now,
+                dueAt: new Date(Date.now() + 14 * 86400000).toISOString(),
+              });
+              delete (user as Record<string, unknown>).loanBalance;
+            }
           }
-          if (!("createdAt" in user)) user.createdAt = now;
-        }
-        // groupsにfanCountが無ければ既存人気度から推定
-        const groups = (s.groups ?? []) as Array<Record<string, unknown>>;
-        for (const g of groups) {
-          if (typeof g.fanCount !== "number") {
-            const pop = typeof g.popularity === "number" ? (g.popularity as number) : 30;
-            g.fanCount = Math.floor(pop * 30);
+          // groupsにfanCountが無ければ既存人気度から推定
+          const groups = (s.groups ?? []) as Array<Record<string, unknown>>;
+          for (const g of groups) {
+            if (typeof g.fanCount !== "number") {
+              const pop = typeof g.popularity === "number" ? (g.popularity as number) : 30;
+              g.fanCount = Math.floor(pop * 30);
+            }
           }
+          if (!Array.isArray(s.ads)) s.ads = [];
+          if (!Array.isArray(s.idols)) s.idols = [];
+          if (!Array.isArray(s.groups)) s.groups = [];
+          if (!Array.isArray(s.posts)) s.posts = [];
+          if (typeof s.initialized !== "boolean") s.initialized = false;
+          void fromVersion;
+          return s as unknown;
+        } catch (e) {
+          console.warn("[migrate] failed, returning as-is", e);
+          return persistedState as unknown;
         }
-        if (!("ads" in s)) s.ads = [];
-        void fromVersion;
-        return s as unknown;
       },
     }
   )
