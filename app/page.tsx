@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { useGame } from "@/lib/store";
 import { DancingIdols } from "@/components/DancingIdols";
 
-// ログインID: 英数字 + 記号1個、8〜12文字 (世界で一意)
-const NICK_RE = /^(?=.{8,12}$)(?=.*[A-Za-z0-9])(?=.*[!@#$%^&*_\-.])[A-Za-z0-9!@#$%^&*_\-.]+$/;
-// 呼び名: どの言語でも OK / 1〜20文字
-const DISPLAY_RE = /^.{1,20}$/u;
+// ユーザーネーム（ログインID・変更不可・世界で一意）: 英数字 + 記号1個、8〜12文字
+const USERNAME_RE = /^(?=.{8,12}$)(?=.*[A-Za-z0-9])(?=.*[!@#$%^&*_\-.])[A-Za-z0-9!@#$%^&*_\-.]+$/;
+// ニックネーム（推しが呼ぶ名前・後から変更可）: 何語でもOK / 記号NG / 1〜20文字
+// \p{L} = Letter(全言語), \p{M} = 結合記号, \p{N} = 数字。空白1個まで許容。
+const NICKNAME_RE = /^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} ]{0,19}$/u;
 
 export default function LandingPage() {
   const router = useRouter();
@@ -52,21 +53,21 @@ export default function LandingPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!NICK_RE.test(nickname)) {
+    if (!USERNAME_RE.test(nickname)) {
       setError(
-        "ID は 8〜12文字、英数字＋記号（!@#$%^&*_-. のいずれか1つ以上）"
+        "ユーザーネームは 8〜12文字、英数字＋記号（!@#$%^&*_-. のいずれか1つ以上）"
       );
       return;
     }
-    if (!DISPLAY_RE.test(displayName.trim())) {
-      setError("呼び名は 1〜20文字で入力してください");
+    if (!NICKNAME_RE.test(displayName.trim())) {
+      setError("ニックネームは 1〜20文字、記号・特殊文字は使えません（言語は自由）");
       return;
     }
     try {
       const raw = localStorage.getItem("rise-nicks");
       const list: string[] = raw ? JSON.parse(raw) : [];
       if (list.includes(nickname.toLowerCase())) {
-        setError("このIDは他のユーザーが使用中です");
+        setError("このユーザーネームは他の人が使用中です");
         return;
       }
       localStorage.setItem(
@@ -87,24 +88,28 @@ export default function LandingPage() {
         </h1>
       </div>
       <form onSubmit={handleSubmit} className="card flex flex-col gap-2">
+        <label className="text-[11px] opacity-70 font-bold">ユーザーネーム</label>
         <input
           className="input"
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
-          placeholder="ログインID"
+          placeholder="loginID_123"
           autoFocus
         />
         <div className="text-[10px] opacity-60">
-          8〜12文字 / 英数字 + 記号1つ（世界で一意）
+          8〜12文字 / 英数字 + 記号1つ（世界で一意・あとから変更不可）
         </div>
+        <label className="text-[11px] opacity-70 font-bold mt-2">ニックネーム</label>
         <input
-          className="input mt-1"
+          className="input"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="推しに呼んでほしい名前"
         />
         <div className="text-[10px] opacity-60">
-          どの言語でもOK（例: さくら / Sakura / 樱 / 사쿠라 / Lily）
+          何語でもOK（さくら / Sakura / 樱 / 사쿠라 / Lily / 리사 / مريم）
+          <br />
+          記号は使えません。あとから変更可能。
         </div>
         {error && <div className="text-kpink text-xs text-center">{error}</div>}
         <button type="submit" className="btn-primary mt-1 text-lg">
