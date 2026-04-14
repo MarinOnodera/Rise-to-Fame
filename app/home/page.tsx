@@ -9,13 +9,20 @@ import { Tutorial } from "@/components/Tutorial";
 import { GameMenu } from "@/components/GameMenu";
 import { WeeklyTopAutoModal, WeeklyTopManual } from "@/components/WeeklyTop";
 import { CoinBadge } from "@/components/CoinBadge";
+import {
+  isPortrait,
+  lockLandscape,
+  onOrientationChange,
+} from "@/lib/orientation";
 
 /**
  * ホーム画面 = 街の全画面 HUD。
- * - 基本は横向きで遊ぶ前提。縦向きの場合は「回してね」ヒントを出す。
- * - 背景は StreetScene をフルブリード。画面にUIが収まるようにスクロール禁止。
- * - ナビは右上のメニューボタン1つに集約し、ドロワーで選択。
- * - 今週のトップは当日1回モーダル + 掲示板ボタンで何度でも開ける。
+ * - 基本は横向きで遊ぶ前提。ログイン直後に screen.orientation.lock で
+ *   自動回転を試み、未対応環境 (iOS Safari 等) のみフォールバックで
+ *   「タップして横画面にする」ボタンを出す。
+ * - 背景は StreetScene をフルブリード、UIは画面内に収める。
+ * - ナビは右上のメニューボタン1つに集約。
+ * - デュアルCTAは文字なしのアイコンボタン (タップで各選択画面へ)。
  */
 export default function HomePage() {
   const router = useRouter();
@@ -28,6 +35,7 @@ export default function HomePage() {
   } = useGame();
   const [menuOpen, setMenuOpen] = useState(false);
   const [topOpen, setTopOpen] = useState(false);
+  const [portrait, setPortrait] = useState(false);
 
   useEffect(() => {
     if (!user) router.replace("/");
@@ -38,6 +46,25 @@ export default function HomePage() {
     }
   }, [user, router, setMode, deliverDailyMessages, tickIdolPosts]);
 
+  // 横画面ロックを試行。ユーザー操作が必要な環境のために、
+  // 初回 pointerdown でも再試行する (gesture scope 内だと通る)。
+  useEffect(() => {
+    if (!user) return;
+    void lockLandscape();
+    const evaluate = () => setPortrait(isPortrait());
+    evaluate();
+    const off = onOrientationChange(evaluate);
+    const gestureLock = () => {
+      void lockLandscape().finally(() => evaluate());
+      window.removeEventListener("pointerdown", gestureLock);
+    };
+    window.addEventListener("pointerdown", gestureLock, { once: true });
+    return () => {
+      off();
+      window.removeEventListener("pointerdown", gestureLock);
+    };
+  }, [user]);
+
   if (!user) return null;
 
   return (
@@ -45,12 +72,11 @@ export default function HomePage() {
       {/* フル画面の街 */}
       <div className="absolute inset-0">
         <StreetScene full />
-        {/* 下から上への暗いグラデでHUDを読みやすく */}
         <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/75 via-black/30 to-transparent pointer-events-none" />
         <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
       </div>
 
-      {/* 上部HUD: ようこそ + コイン + メニュー */}
+      {/* 上部HUD: ようこそ + コイン + 掲示板 + メニュー */}
       <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 sm:px-5 py-2 gap-3">
         <div className="min-w-0">
           <div className="text-[10px] sm:text-[11px] leading-tight bg-gradient-to-r from-kpink to-kgold bg-clip-text text-transparent font-bold truncate">
@@ -80,7 +106,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* 街中の掲示板タイル (タップで今週のトップ) */}
+      {/* 街中の掲示板タイル */}
       <button
         onClick={() => setTopOpen(true)}
         className="absolute z-10 left-3 sm:left-5 top-20 sm:top-24 active:scale-95"
@@ -93,54 +119,47 @@ export default function HomePage() {
           <div className="text-xs font-black leading-tight">今週のトップ3</div>
           <div className="text-[9px] opacity-80 mt-0.5">タップで確認</div>
         </div>
-        {/* 掲示板の脚 */}
         <div className="mx-auto w-[6px] h-4 bg-[#1a0826]" />
       </button>
 
-      {/* 下部のデュアルCTA (画面に常に収まる) */}
-      <div className="absolute bottom-0 inset-x-0 z-20 px-3 sm:px-5 pb-3 sm:pb-4">
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 max-w-3xl mx-auto">
-          <Link
+      {/* 下部: アイコンのみのデュアルCTA (タップで各選択画面へ) */}
+      <div className="absolute bottom-0 inset-x-0 z-20 pb-4 sm:pb-6">
+        <div className="flex items-end justify-center gap-6 sm:gap-12">
+          <CtaIconButton
             href="/fan/discover"
-            className="card !p-3 flex items-center gap-2 border-kpink/50 bg-gradient-to-br from-kpink/35 to-kpurple/30 active:scale-95"
-          >
-            <span className="text-xl sm:text-2xl">🔮</span>
-            <span className="flex flex-col leading-tight">
-              <span className="font-bold text-xs sm:text-sm">
-                推しアイドルを探しに行く
-              </span>
-              <span className="text-[10px] opacity-70">
-                AIがあなたに合う3人を選ぶ
-              </span>
-            </span>
-          </Link>
-          <Link
+            emoji="🔮"
+            label="推しアイドルを探す"
+            tone="from-kpink to-kpurple"
+          />
+          <CtaIconButton
             href="/producer"
-            className="card !p-3 flex items-center gap-2 border-kgold/50 bg-gradient-to-br from-kgold/35 to-kpink/30 active:scale-95"
-          >
-            <span className="text-xl sm:text-2xl">🎬</span>
-            <span className="flex flex-col leading-tight">
-              <span className="font-bold text-xs sm:text-sm">
-                アイドルグループを作成する
-              </span>
-              <span className="text-[10px] opacity-70">
-                プロデューサーとして事務所設立
-              </span>
-            </span>
-          </Link>
+            emoji="🎬"
+            label="アイドルグループを作成する"
+            tone="from-kgold to-kpink"
+          />
         </div>
       </div>
 
-      {/* 縦向き時のガイド (任意: 横でも動くが基本は横) */}
-      <div className="portrait-hint" aria-hidden>
-        <div className="text-center">
-          <div className="text-5xl animate-pulse">📱↺</div>
-          <div className="mt-3 font-bold">画面を横にしてね</div>
-          <div className="text-xs opacity-70 mt-1">
-            ゲームは横画面でプレイする設計です
+      {/* 縦画面フォールバック: タップで横画面にする */}
+      {portrait && (
+        <button
+          className="portrait-hint"
+          onClick={() => {
+            void lockLandscape().finally(() => setPortrait(isPortrait()));
+          }}
+        >
+          <div className="text-center">
+            <div className="text-6xl animate-pulse">📱↺</div>
+            <div className="mt-4 font-bold text-lg">横画面に切り替える</div>
+            <div className="text-xs opacity-70 mt-1">
+              タップで自動的に横向きに回転します
+            </div>
+            <div className="text-[10px] opacity-50 mt-3">
+              ※ iOS Safariでは端末の回転ロックを解除してください
+            </div>
           </div>
-        </div>
-      </div>
+        </button>
+      )}
 
       {/* Overlays */}
       {!user.tutorialDone && <Tutorial onFinish={completeTutorial} />}
@@ -148,5 +167,38 @@ export default function HomePage() {
       <WeeklyTopManual open={topOpen} onClose={() => setTopOpen(false)} />
       <GameMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
     </main>
+  );
+}
+
+/**
+ * アイコンのみの丸ボタン。タップすると対応する選択画面に遷移する。
+ * labelは画面に常時表示せずにフローティングチップだけ出して認知性は残す。
+ */
+function CtaIconButton({
+  href,
+  emoji,
+  label,
+  tone,
+}: {
+  href: string;
+  emoji: string;
+  label: string;
+  tone: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex flex-col items-center gap-1.5 active:scale-95"
+      aria-label={label}
+    >
+      <span
+        className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br ${tone} shadow-glow flex items-center justify-center text-3xl sm:text-4xl border-2 border-white/30`}
+      >
+        {emoji}
+      </span>
+      <span className="chip !bg-black/60 !text-[10px] !text-white/90 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition">
+        {label}
+      </span>
+    </Link>
   );
 }

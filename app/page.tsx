@@ -9,6 +9,7 @@ import {
   readBackup,
   requestPersistentStorage,
 } from "@/lib/persistence";
+import { lockLandscape } from "@/lib/orientation";
 
 // ユーザーネーム（ログインID・変更不可・世界で一意）: 英数字 + 記号1個、8〜12文字
 const USERNAME_RE = /^(?=.{8,12}$)(?=.*[A-Za-z0-9])(?=.*[!@#$%^&*_\-.])[A-Za-z0-9!@#$%^&*_\-.]+$/;
@@ -108,6 +109,8 @@ export default function LandingPage() {
     registerUser(nickname, displayName.trim());
     // 登録直後の操作トリガで永続ストレージを要求しておく (ITPで消されないよう)
     void requestPersistentStorage();
+    // 同じユーザー操作スコープで横画面ロックを要求 (モバイルの要件)
+    void lockLandscape();
   }
 
   return (
