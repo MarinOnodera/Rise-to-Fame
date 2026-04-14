@@ -5,6 +5,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGame } from "@/lib/store";
 import { DancingIdols } from "@/components/DancingIdols";
+import {
+  readBackup,
+  requestPersistentStorage,
+} from "@/lib/persistence";
 
 // ユーザーネーム（ログインID・変更不可・世界で一意）: 英数字 + 記号1個、8〜12文字
 const USERNAME_RE = /^(?=.{8,12}$)(?=.*[A-Za-z0-9])(?=.*[!@#$%^&*_\-.])[A-Za-z0-9!@#$%^&*_\-.]+$/;
@@ -14,24 +18,50 @@ const NICKNAME_RE = /^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N} ]{0,19}$/u;
 
 export default function LandingPage() {
   const router = useRouter();
-  const { user, initialized, initWorld, registerUser, applyDailyLogin } =
-    useGame();
+  const {
+    user,
+    initialized,
+    initWorld,
+    registerUser,
+    restoreFromBackup,
+    applyDailyLogin,
+  } = useGame();
   const [nickname, setNickname] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  // バックアップからの復元を試行中かどうか。復元試行の前に登録フォームを
+  // チラ見せしないために、初回判定が終わるまでブランク描画する。
+  const [restoreChecked, setRestoreChecked] = useState(false);
 
   useEffect(() => {
     setHydrated(true);
     if (!initialized) initWorld();
+    // localStorage が飛ばされていた場合でも Cookie バックアップから自動復旧
+    if (!user) {
+      const b = readBackup();
+      if (b) {
+        restoreFromBackup(b);
+      }
+    }
+    setRestoreChecked(true);
     if (user) {
       applyDailyLogin();
+      // ブラウザにストレージを消さないよう依頼 (ベストエフォート)
+      void requestPersistentStorage();
       // 自動ログイン: 登録済みなら問答無用でゲームへ
       router.replace("/home");
     }
-  }, [initialized, user, initWorld, applyDailyLogin, router]);
+  }, [
+    initialized,
+    user,
+    initWorld,
+    applyDailyLogin,
+    router,
+    restoreFromBackup,
+  ]);
 
-  if (!hydrated) return null;
+  if (!hydrated || !restoreChecked) return null;
 
   // 既に登録済み→/home に飛ばすまでの間、Dancing画面を出すだけ
   if (user) {
@@ -76,6 +106,8 @@ export default function LandingPage() {
       );
     } catch {}
     registerUser(nickname, displayName.trim());
+    // 登録直後の操作トリガで永続ストレージを要求しておく (ITPで消されないよう)
+    void requestPersistentStorage();
   }
 
   return (

@@ -27,6 +27,7 @@ import {
 } from "./economy";
 import type { AuditionCandidate, IdolPost, Loan, PostKind } from "./types";
 import { contractSuccessRate } from "./contracts";
+import { readBackup, writeBackup, type UserBackup } from "./persistence";
 
 interface State {
   initialized: boolean;
@@ -38,6 +39,7 @@ interface State {
   // actions
   initWorld: () => void;
   registerUser: (nickname: string, displayName: string) => void;
+  restoreFromBackup: (b: UserBackup) => void;
   setDisplayName: (name: string) => void;
   setAvatar: (avatar: UserAvatar | null) => void;
   setMode: (mode: UserMode) => void;
@@ -128,6 +130,42 @@ export const useGame = create<State>()(
             giftsSent: [],
             bankAccount: null,
             createdAt: now,
+            avatar: null,
+          },
+        });
+      },
+
+      // localStorage が消えても Cookie から復旧できるよう、最低限の情報から
+      // UserProfile を再構築する。インボックスやコンサート履歴など再生成可能な
+      // コレクションは空で復活する (= 重要なID/コイン/推しは失われない)。
+      restoreFromBackup: (b) => {
+        const now = new Date().toISOString();
+        set({
+          user: {
+            nickname: b.nickname,
+            displayName: b.displayName || b.nickname,
+            mode: b.mode ?? null,
+            coins: typeof b.coins === "number" ? b.coins : 500,
+            lastLoginAt: b.lastLoginAt ?? now,
+            streak: typeof b.streak === "number" ? b.streak : 1,
+            agencyId: b.agencyId,
+            agencyName: b.agencyName,
+            loans: [],
+            payoutEarnedJpy: 0,
+            payoutRequestedJpy: 0,
+            payoutPaidJpy: 0,
+            concerts: [],
+            tutorialDone: b.tutorialDone ?? true,
+            effort: 0,
+            lastEffortDecayAt: now,
+            biasGroupIds: Array.isArray(b.biasGroupIds) ? b.biasGroupIds : [],
+            biasIdolIds: Array.isArray(b.biasIdolIds) ? b.biasIdolIds : [],
+            inbox: [],
+            ownedGoods: {},
+            tickets: [],
+            giftsSent: [],
+            bankAccount: null,
+            createdAt: b.createdAt ?? now,
             avatar: null,
           },
         });
@@ -883,6 +921,37 @@ export const useGame = create<State>()(
           return persistedState as unknown;
         }
       },
+      // persist からハイドレートが完了したタイミングで呼ばれる。
+      // ここで localStorage が空 (= ブラウザに飛ばされた) だった場合に、
+      // Cookie に残っているバックアップからユーザーを自動復旧する。
+      onRehydrateStorage: () => (state) => {
+        if (typeof window === "undefined") return;
+        try {
+          if (!state?.user) {
+            const b = readBackup();
+            if (b) {
+              useGame.getState().restoreFromBackup(b);
+              console.info("[persistence] restored user from cookie backup");
+            }
+          }
+        } catch (e) {
+          console.warn("[persistence] restore failed", e);
+        }
+      },
     }
   )
 );
+
+// ユーザーが変化するたびに Cookie (+ localStorage ミラー) にバックアップを保存する。
+// これにより iOS Safari ITP や quota 退避で localStorage が消えても、
+// 次回起動時に readBackup() から自動復旧できる。
+if (typeof window !== "undefined") {
+  let lastUser = useGame.getState().user;
+  useGame.subscribe((state) => {
+    const u = state.user;
+    if (u && u !== lastUser) {
+      writeBackup(u);
+    }
+    lastUser = u;
+  });
+}
