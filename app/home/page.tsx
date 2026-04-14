@@ -122,9 +122,9 @@ export default function HomePage() {
         <div className="mx-auto w-[6px] h-4 bg-[#1a0826]" />
       </button>
 
-      {/* 下部: アイコンのみのデュアルCTA (タップで各選択画面へ) */}
-      <div className="absolute bottom-0 inset-x-0 z-20 pb-4 sm:pb-6">
-        <div className="flex items-end justify-center gap-6 sm:gap-12">
+      {/* 右下: アイコンのみのデュアルCTA (横画面で親指が届きやすい位置) */}
+      <div className="absolute bottom-0 right-0 z-20 pb-3 pr-3 sm:pb-4 sm:pr-4">
+        <div className="flex items-end gap-2 sm:gap-3">
           <CtaIconButton
             href="/fan/discover"
             emoji="🔮"
@@ -188,15 +188,16 @@ function CtaIconButton({
   return (
     <Link
       href={href}
-      className="group flex flex-col items-center gap-1.5 active:scale-95"
+      className="group flex flex-col items-center gap-1 active:scale-95"
       aria-label={label}
+      title={label}
     >
       <span
-        className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br ${tone} shadow-glow flex items-center justify-center text-3xl sm:text-4xl border-2 border-white/30`}
+        className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br ${tone} shadow-glow flex items-center justify-center text-xl sm:text-2xl border border-white/25`}
       >
         {emoji}
       </span>
-      <span className="chip !bg-black/60 !text-[10px] !text-white/90 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition">
+      <span className="chip !bg-black/60 !text-[9px] !text-white/90 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition">
         {label}
       </span>
     </Link>
