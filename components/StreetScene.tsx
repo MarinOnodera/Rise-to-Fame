@@ -16,7 +16,12 @@ const PRODUCT_ICON: Record<string, string> = {
   variety: "🎬",
 };
 
-export function StreetScene() {
+export function StreetScene({
+  full = false,
+}: {
+  /** 親要素のサイズに合わせてフルブリード表示する (ホームの横向き背景用) */
+  full?: boolean;
+} = {}) {
   const { ads, idols, user, toggleBiasIdol } = useGame();
   const [picked, setPicked] = useState<{
     ad: CityAd;
@@ -28,9 +33,15 @@ export function StreetScene() {
   const busBill = ads.filter((a) => a.placement === "bus");
 
   return (
-    <div className="relative">
+    <div className={full ? "relative w-full h-full" : "relative"}>
       {/* SKY + CITY SKYLINE */}
-      <div className="relative h-[360px] overflow-hidden rounded-2xl border border-white/5">
+      <div
+        className={
+          full
+            ? "relative w-full h-full overflow-hidden"
+            : "relative h-[360px] overflow-hidden rounded-2xl border border-white/5"
+        }
+      >
         {/* sky */}
         <div
           className="absolute inset-0"

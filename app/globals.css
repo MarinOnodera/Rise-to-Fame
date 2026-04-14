@@ -54,3 +54,21 @@ body {
 .avatar {
   @apply relative inline-flex items-center justify-center rounded-full overflow-hidden;
 }
+
+/* 縦画面で遊ぼうとした人向けのガイド。横画面では非表示。 */
+.portrait-hint {
+  @apply hidden;
+}
+@media (orientation: portrait) and (max-width: 900px) {
+  .portrait-hint {
+    @apply fixed inset-0 z-[800] flex items-center justify-center bg-black/90 text-white px-6;
+  }
+}
+
+/* 横スクロールバー非表示ユーティリティ */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}

@@ -193,6 +193,10 @@ export default function AvatarStudioPage() {
   function save() {
     setAvatar({ ...draft, createdAt: new Date().toISOString() });
     setStatus("✓ 保存しました");
+    // 初回 (オンボーディング直後) は自動的に街 /home に戻す
+    if (!user?.avatar) {
+      setTimeout(() => router.replace("/home"), 600);
+    }
   }
 
   const currentOptions = OPTIONS[tab];
