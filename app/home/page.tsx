@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGame } from "@/lib/store";
@@ -9,6 +10,12 @@ import { Tutorial } from "@/components/Tutorial";
 import { GameMenu } from "@/components/GameMenu";
 import { WeeklyTopAutoModal, WeeklyTopManual } from "@/components/WeeklyTop";
 import { CoinBadge } from "@/components/CoinBadge";
+
+// 3D シティはクライアントオンリー (Three.js は window 必須)
+const City3D = dynamic(
+  () => import("@/components/City3D").then((m) => m.City3D),
+  { ssr: false }
+);
 import {
   isPortrait,
   lockLandscape,
@@ -69,10 +76,14 @@ export default function HomePage() {
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-kdark">
-      {/* フル画面の街 */}
+      {/* フル画面の街: アバター作成済みなら 3D で歩ける街、それ以外は SVG 街 */}
       <div className="absolute inset-0">
-        <StreetScene full />
-        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/75 via-black/30 to-transparent pointer-events-none" />
+        {user.avatar ? (
+          <City3D avatar={user.avatar} />
+        ) : (
+          <StreetScene full />
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/65 via-black/15 to-transparent pointer-events-none" />
         <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
       </div>
 
