@@ -11,6 +11,9 @@ import type {
   UserProfile,
   CityAd,
   UserAvatar,
+  RoomItem,
+  RoomState,
+  OfficeLevel,
 } from "./types";
 import { buildDefaultWorld } from "./idols/defaults";
 import { generateIdol } from "./idols/generator";
@@ -84,7 +87,50 @@ interface State {
   approvePost: (postId: string, approved: boolean) => void;
   goLive: (idolId: string, minutes: number) => { ok: boolean; reason?: string };
   likePost: (postId: string) => void;
+  // 拠点 (家 / 事務所)
+  addRoomItem: (target: "house" | "office", item: Omit<RoomItem, "id">) => void;
+  removeRoomItem: (target: "house" | "office", id: string) => void;
+  moveRoomItem: (target: "house" | "office", id: string, x: number, y: number) => void;
+  setRoomHue: (target: "house" | "office", wallHue: number, floorHue: number) => void;
+  upgradeOffice: () => { ok: boolean; reason?: string; newLevel?: OfficeLevel };
 }
+
+// ====== 拠点のデフォルト生成 ======
+function defaultHouse(): RoomState {
+  return {
+    wallHue: 300,
+    floorHue: 30,
+    items: [
+      { id: "house_bed_0", kind: "bed", x: 0, y: 0, colorA: "#ff7ac6", colorB: "#7b2cff" },
+      { id: "house_desk_0", kind: "desk", x: 5, y: 0, colorA: "#312150", colorB: "#ffd166" },
+      { id: "house_lamp_0", kind: "lamp", x: 7, y: 0, colorA: "#ff3d8b", colorB: "#ffd166" },
+      { id: "house_plant_0", kind: "plant", x: 7, y: 4, colorA: "#1f6b3a", colorB: "#ffd166" },
+    ],
+  };
+}
+
+function defaultOffice(): RoomState {
+  return {
+    wallHue: 270,
+    floorHue: 240,
+    items: [
+      { id: "office_desk_0", kind: "desk", x: 2, y: 2, colorA: "#1a1030", colorB: "#ffd166" },
+      { id: "office_shelf_0", kind: "shelf", x: 5, y: 4, colorA: "#3a2554", colorB: "#ff3d8b" },
+    ],
+  };
+}
+
+// ====== 事務所アップグレードの基準 ======
+// L2: 5,000コイン + 所属アイドルの最高人気度 >= 50
+// L3: 25,000コイン + 所属グループの最高 fanCount >= 3,000 & 最高人気度 >= 80
+export const OFFICE_UPGRADE_REQS: Record<
+  OfficeLevel,
+  { cost: number; description: string }
+> = {
+  1: { cost: 0, description: "自室の一角" },
+  2: { cost: 5000, description: "小規模事務所 (アイドルの最高人気 50 以上)" },
+  3: { cost: 25000, description: "大型事務所 (ファン 3,000 / 人気 80 以上)" },
+};
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
 
@@ -131,6 +177,9 @@ export const useGame = create<State>()(
             bankAccount: null,
             createdAt: now,
             avatar: null,
+            house: defaultHouse(),
+            office: defaultOffice(),
+            officeLevel: 1,
           },
         });
       },
@@ -167,6 +216,9 @@ export const useGame = create<State>()(
             bankAccount: null,
             createdAt: b.createdAt ?? now,
             avatar: null,
+            house: defaultHouse(),
+            office: defaultOffice(),
+            officeLevel: 1,
           },
         });
       },
@@ -847,6 +899,106 @@ export const useGame = create<State>()(
         });
         return { ok: true, revenueCoins };
       },
+
+      // ====== 家 / 事務所 ======
+      addRoomItem: (target, item) => {
+        const u = get().user;
+        if (!u) return;
+        const room = (target === "house" ? u.house : u.office) ??
+          (target === "house" ? defaultHouse() : defaultOffice());
+        // 最大配置数 (グリッドを埋めすぎない)
+        if (room.items.length >= 24) return;
+        const next: RoomItem = { ...item, id: newId("itm_") };
+        const updated = { ...room, items: [...room.items, next] };
+        set({
+          user:
+            target === "house"
+              ? { ...u, house: updated }
+              : { ...u, office: updated },
+        });
+      },
+      removeRoomItem: (target, id) => {
+        const u = get().user;
+        if (!u) return;
+        const room = target === "house" ? u.house : u.office;
+        if (!room) return;
+        const updated = { ...room, items: room.items.filter((i) => i.id !== id) };
+        set({
+          user:
+            target === "house"
+              ? { ...u, house: updated }
+              : { ...u, office: updated },
+        });
+      },
+      moveRoomItem: (target, id, x, y) => {
+        const u = get().user;
+        if (!u) return;
+        const room = target === "house" ? u.house : u.office;
+        if (!room) return;
+        const cx = Math.max(0, Math.min(7, Math.round(x)));
+        const cy = Math.max(0, Math.min(5, Math.round(y)));
+        const updated = {
+          ...room,
+          items: room.items.map((i) =>
+            i.id === id ? { ...i, x: cx, y: cy } : i
+          ),
+        };
+        set({
+          user:
+            target === "house"
+              ? { ...u, house: updated }
+              : { ...u, office: updated },
+        });
+      },
+      setRoomHue: (target, wallHue, floorHue) => {
+        const u = get().user;
+        if (!u) return;
+        const room = (target === "house" ? u.house : u.office) ??
+          (target === "house" ? defaultHouse() : defaultOffice());
+        const updated = { ...room, wallHue, floorHue };
+        set({
+          user:
+            target === "house"
+              ? { ...u, house: updated }
+              : { ...u, office: updated },
+        });
+      },
+      upgradeOffice: () => {
+        const u = get().user;
+        if (!u) return { ok: false, reason: "未ログイン" };
+        const level = (u.officeLevel ?? 1) as OfficeLevel;
+        if (level >= 3) return { ok: false, reason: "すでに最大レベルです" };
+        const nextLevel = ((level + 1) as OfficeLevel);
+        const req = OFFICE_UPGRADE_REQS[nextLevel];
+        // 進行条件: 所属アイドル/グループの人気度とファン数
+        const myIdols = get().idols.filter((i) => i.ownerId === u.agencyId);
+        const myGroups = get().groups.filter((g) => g.agencyId === u.agencyId);
+        const topPop = myIdols.reduce((m, i) => Math.max(m, i.popularity), 0);
+        const topFans = myGroups.reduce((m, g) => Math.max(m, g.fanCount), 0);
+        if (nextLevel === 2 && topPop < 50) {
+          return {
+            ok: false,
+            reason: "所属アイドルの最高人気度が 50 以上で解放されます",
+          };
+        }
+        if (nextLevel === 3 && (topFans < 3000 || topPop < 80)) {
+          return {
+            ok: false,
+            reason: "最高グループファン数 3,000 & 最高人気度 80 以上で解放",
+          };
+        }
+        if (u.coins < req.cost) {
+          return { ok: false, reason: `コインが足りません (必要: ${req.cost.toLocaleString()})` };
+        }
+        set({
+          user: {
+            ...u,
+            coins: u.coins - req.cost,
+            officeLevel: nextLevel,
+          },
+        });
+        return { ok: true, newLevel: nextLevel };
+      },
     }),
     {
       name: "rise-to-fame-v2",
@@ -870,6 +1022,9 @@ export const useGame = create<State>()(
             if (!Array.isArray(user.giftsSent)) user.giftsSent = [];
             if (!user.bankAccount) user.bankAccount = null;
             if (!("avatar" in user)) user.avatar = null;
+            if (!user.house) user.house = defaultHouse();
+            if (!user.office) user.office = defaultOffice();
+            if (typeof user.officeLevel !== "number") user.officeLevel = 1;
             if (typeof user.createdAt !== "string") user.createdAt = now;
             if (typeof user.displayName !== "string" || !user.displayName) {
               user.displayName = (user.nickname as string) ?? "";

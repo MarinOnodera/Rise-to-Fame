@@ -590,13 +590,16 @@ function Player({
     const camPitch = THREE.MathUtils.clamp(input.current.camPitch, 0.15, 1.0);
 
     // カメラ相対の移動方向を計算
-    // forward = -y (ジョイ上 = 前進), camera yaw 適用
+    // forward = カメラ→アバター方向 (画面奥), right = 画面右方向。
+    // right = cross(forward, up) を Three.js (y-up 右手系) で展開すると
+    // rightX = -cos(yaw), rightZ = sin(yaw) になる。
+    // ここを誤ると左右が逆になるので要注意。
     const speed = 5.5;
     const mag = Math.hypot(jx, jy);
     const forwardX = Math.sin(camYaw);
     const forwardZ = Math.cos(camYaw);
-    const rightX = Math.cos(camYaw);
-    const rightZ = -Math.sin(camYaw);
+    const rightX = -Math.cos(camYaw);
+    const rightZ = Math.sin(camYaw);
 
     let dx = 0;
     let dz = 0;

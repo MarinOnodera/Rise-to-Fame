@@ -185,6 +185,43 @@ export interface UserProfile {
   createdAt: string;
   // ユーザー自身のアバター (LA街で遊ぶ自分)。未設定なら null。
   avatar?: UserAvatar | null;
+  // 拠点: 自分の家 (常時所持) / 事務所 (段階的にアップグレード)
+  house?: RoomState;
+  office?: RoomState;
+  officeLevel?: OfficeLevel; // 1=自室の一角, 2=小規模事務所, 3=大事務所
+}
+
+// ====== 拠点 (家 / 事務所) ======
+
+export type OfficeLevel = 1 | 2 | 3;
+
+export type RoomItemKind =
+  | "poster"   // 推しポスター (groupId 紐付け可)
+  | "plant"    // 観葉植物
+  | "sofa"
+  | "desk"
+  | "lamp"    // ネオンランプ (発光)
+  | "rug"
+  | "shelf"
+  | "tv"
+  | "bed"
+  | "trophy";  // デビュー記念トロフィー
+
+export interface RoomItem {
+  id: string;
+  kind: RoomItemKind;
+  x: number; // グリッド 0..7
+  y: number; // グリッド 0..5
+  // poster の場合に紐付くグループ (なければ単色ポスター)
+  groupId?: string;
+  colorA: string;
+  colorB: string;
+}
+
+export interface RoomState {
+  wallHue: number;   // 0..360
+  floorHue: number;  // 0..360
+  items: RoomItem[];
 }
 
 export interface GiftItem {
