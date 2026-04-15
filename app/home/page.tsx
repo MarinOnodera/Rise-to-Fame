@@ -5,17 +5,39 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGame } from "@/lib/store";
-import { StreetScene } from "@/components/StreetScene";
 import { Tutorial } from "@/components/Tutorial";
 import { GameMenu } from "@/components/GameMenu";
 import { WeeklyTopAutoModal, WeeklyTopManual } from "@/components/WeeklyTop";
 import { CoinBadge } from "@/components/CoinBadge";
+import type { UserAvatar } from "@/lib/types";
 
 // 3D シティはクライアントオンリー (Three.js は window 必須)
 const City3D = dynamic(
   () => import("@/components/City3D").then((m) => m.City3D),
   { ssr: false }
 );
+
+// アバター未作成ユーザー向けのデフォルトアバター。
+// 街だけ先に見せて、/avatar でいつでも自分の見た目に置き換えられる。
+const FALLBACK_AVATAR: UserAvatar = {
+  id: "fallback_avatar",
+  source: "manual",
+  skinHue: 28,
+  hairHue: 300,
+  eyeHue: 200,
+  lipHue: 340,
+  outfitHueA: 320,
+  outfitHueB: 260,
+  parts: {
+    hair: "long-wave",
+    eyes: "almond",
+    outfit: "crop-jacket",
+    accessory: "neon-shades",
+    background: "la-sunset-blvd",
+    pose: "hand-on-hip",
+  },
+  createdAt: new Date(0).toISOString(),
+};
 import {
   isPortrait,
   lockLandscape,
@@ -76,13 +98,9 @@ export default function HomePage() {
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-kdark">
-      {/* フル画面の街: アバター作成済みなら 3D で歩ける街、それ以外は SVG 街 */}
+      {/* フル画面の街: 常に 3D。アバター未作成時は仮アバターで表示。 */}
       <div className="absolute inset-0">
-        {user.avatar ? (
-          <City3D avatar={user.avatar} />
-        ) : (
-          <StreetScene full />
-        )}
+        <City3D avatar={user.avatar ?? FALLBACK_AVATAR} />
         <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/65 via-black/15 to-transparent pointer-events-none" />
         <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
       </div>
