@@ -177,10 +177,10 @@ function Avatar3D({
 
   return (
     <group>
-      {/* Head */}
-      <mesh position={[0, 1.62, 0]} castShadow>
-        <sphereGeometry args={[0.18, 20, 20]} />
-        <meshStandardMaterial color={skin} />
+      {/* Head (丸く高解像度な球: カクカク感を排除) */}
+      <mesh position={[0, 1.6, 0]} scale={[1, 1.08, 1]} castShadow>
+        <sphereGeometry args={[0.23, 48, 48]} />
+        <meshStandardMaterial color={skin} roughness={0.6} />
       </mesh>
       {/* Eyes (front emissive dots) */}
       <mesh position={[-0.06, 1.63, 0.16]}>
@@ -206,18 +206,105 @@ function Avatar3D({
         <boxGeometry args={[0.06, 0.012, 0.005]} />
         <meshStandardMaterial color={lip} emissive={lip} emissiveIntensity={0.4} />
       </mesh>
-      {/* Hair cap */}
-      <mesh position={[0, 1.72, -0.02]} castShadow>
-        <sphereGeometry args={[0.22, 20, 20]} />
-        <meshStandardMaterial color={hair} />
+      {/* Hair cap (滑らかな半ドーム + 束感のある曲面) */}
+      <mesh position={[0, 1.66, -0.015]} scale={[1.04, 0.9, 1.06]} castShadow>
+        {/* 上半球だけの部分球にして、頭の形にフィットするヘア */}
+        <sphereGeometry
+          args={[0.255, 48, 48, 0, Math.PI * 2, 0, Math.PI * 0.6]}
+        />
+        <meshStandardMaterial color={hair} roughness={0.5} />
       </mesh>
-      {/* Hair tail (long-style hint) */}
+      {/* 前髪 (丸みのある束) */}
+      <mesh position={[0, 1.58, 0.17]} rotation={[-0.25, 0, 0]} castShadow>
+        <sphereGeometry
+          args={[0.2, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.42]}
+        />
+        <meshStandardMaterial color={hair} roughness={0.5} />
+      </mesh>
+      {/* 長髪系: 背中に流れるロングヘア (ボックスやめてカプセル + 末広がり) */}
       {(avatar.parts.hair === "long-straight" ||
-        avatar.parts.hair === "long-wave" ||
-        avatar.parts.hair === "ponytail") && (
-        <mesh position={[0, 1.35, -0.18]} castShadow>
-          <boxGeometry args={[0.32, 0.5, 0.08]} />
-          <meshStandardMaterial color={hair} />
+        avatar.parts.hair === "long-wave") && (
+        <mesh
+          position={[0, 1.28, -0.17]}
+          rotation={[0.08, 0, 0]}
+          scale={[1.05, 1, 0.55]}
+          castShadow
+        >
+          <capsuleGeometry args={[0.17, 0.52, 8, 20]} />
+          <meshStandardMaterial color={hair} roughness={0.55} />
+        </mesh>
+      )}
+      {/* ポニーテール: 結び目 + 後ろに流れる尻尾 */}
+      {avatar.parts.hair === "ponytail" && (
+        <>
+          <mesh position={[0, 1.66, -0.2]} castShadow>
+            <sphereGeometry args={[0.07, 24, 24]} />
+            <meshStandardMaterial color={hair} roughness={0.55} />
+          </mesh>
+          <mesh
+            position={[0, 1.42, -0.3]}
+            rotation={[0.55, 0, 0]}
+            scale={[0.7, 1, 0.7]}
+            castShadow
+          >
+            <capsuleGeometry args={[0.08, 0.38, 8, 16]} />
+            <meshStandardMaterial color={hair} roughness={0.55} />
+          </mesh>
+        </>
+      )}
+      {/* ボブ: あごのラインに丸くまとまる */}
+      {avatar.parts.hair === "bob" && (
+        <mesh
+          position={[0, 1.48, -0.02]}
+          scale={[1.1, 1.15, 1.12]}
+          castShadow
+        >
+          <sphereGeometry
+            args={[0.23, 40, 40, 0, Math.PI * 2, 0, Math.PI * 0.78]}
+          />
+          <meshStandardMaterial color={hair} roughness={0.5} />
+        </mesh>
+      )}
+      {/* ツインお団子 */}
+      {avatar.parts.hair === "twin-buns" && (
+        <>
+          <mesh position={[0.22, 1.82, -0.02]} castShadow>
+            <sphereGeometry args={[0.1, 24, 24]} />
+            <meshStandardMaterial color={hair} roughness={0.5} />
+          </mesh>
+          <mesh position={[-0.22, 1.82, -0.02]} castShadow>
+            <sphereGeometry args={[0.1, 24, 24]} />
+            <meshStandardMaterial color={hair} roughness={0.5} />
+          </mesh>
+        </>
+      )}
+      {/* ハーフアップ: 小さな結び目 + ゆるやかな後ろ髪 */}
+      {avatar.parts.hair === "half-up" && (
+        <>
+          <mesh position={[0, 1.84, -0.06]} castShadow>
+            <sphereGeometry args={[0.08, 24, 24]} />
+            <meshStandardMaterial color={hair} roughness={0.5} />
+          </mesh>
+          <mesh
+            position={[0, 1.4, -0.17]}
+            scale={[1, 1, 0.55]}
+            castShadow
+          >
+            <capsuleGeometry args={[0.14, 0.3, 8, 16]} />
+            <meshStandardMaterial color={hair} roughness={0.55} />
+          </mesh>
+        </>
+      )}
+      {/* モヒカン・フェード: 細く高い稜線 */}
+      {avatar.parts.hair === "mohawk-fade" && (
+        <mesh
+          position={[0, 1.82, 0]}
+          scale={[0.35, 1, 1]}
+          rotation={[0, 0, 0]}
+          castShadow
+        >
+          <capsuleGeometry args={[0.08, 0.2, 8, 16]} />
+          <meshStandardMaterial color={hair} roughness={0.45} />
         </mesh>
       )}
       {/* Torso (outfit A) */}
