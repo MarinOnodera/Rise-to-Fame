@@ -51,6 +51,8 @@ export function GameMenu({
     { href: "/fan/shop", emoji: "🛍", title: "推しグッズ", desc: "ペンライト/CD/PC" },
     { href: "/fan/discover", emoji: "🔮", title: "推しを探す", desc: "AIマッチ" },
     { href: "/gallery", emoji: "📷", title: "写真館", desc: "広告の名作アーカイブ" },
+    { href: "/house", emoji: "🏠", title: "お家", desc: "ポスターや家具を飾ろう" },
+    { href: "/office", emoji: "🏢", title: "事務所", desc: "ランクアップで拡大" },
     { href: "/producer", emoji: "🎬", title: "プロデューサー", desc: "事務所を運営" },
     { href: "/avatar", emoji: "🪞", title: "アバター工房", desc: "自分の姿を調整" },
     { href: "/shop/coins", emoji: "♦", title: "コイン購入", desc: "課金で追加" },

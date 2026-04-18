@@ -119,7 +119,7 @@ export default function LandingPage() {
       <div className="text-center -mt-1">
         <div className="text-[10px] opacity-60 tracking-[0.4em]">RISE TO FAME</div>
         <h1 className="font-display text-3xl font-black mt-1 bg-gradient-to-r from-kpink to-kgold bg-clip-text text-transparent">
-          舞台に立つのは、誰だ？
+          ようこそ MarinLuna へ
         </h1>
       </div>
       <form onSubmit={handleSubmit} className="card flex flex-col gap-2">

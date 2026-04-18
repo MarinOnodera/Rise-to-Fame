@@ -119,10 +119,10 @@ export default function HomePage() {
       <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 sm:px-5 py-2 gap-3">
         <div className="min-w-0">
           <div className="text-[10px] sm:text-[11px] leading-tight bg-gradient-to-r from-kpink to-kgold bg-clip-text text-transparent font-bold truncate">
-            {user.displayName || user.nickname}さん、ようこそ！
+            {user.displayName || user.nickname}さん、ようこそ MarinLuna へ！
           </div>
           <div className="font-display text-sm sm:text-base font-bold leading-tight truncate">
-            LA × Seoul Street
+            📍 Seoul
           </div>
         </div>
         <div className="flex items-center gap-2">

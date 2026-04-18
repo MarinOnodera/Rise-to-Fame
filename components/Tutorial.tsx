@@ -7,8 +7,8 @@ import { useGame } from "@/lib/store";
 const STEPS: Array<{ emoji: string; title: string; body: string }> = [
   {
     emoji: "🌆",
-    title: "ようこそ LA × SEOUL へ",
-    body: "あなたは街を歩きながら、推しアイドルを見つけたり、自分の事務所を立ち上げたりできます。",
+    title: "ようこそ MarinLuna へ",
+    body: "Seoul の街を歩きながら、推しアイドルを見つけたり、自分の事務所を立ち上げたりできます。",
   },
   {
     emoji: "💖",
