@@ -134,6 +134,46 @@ export interface CityAd {
   promoteGroupId?: string; // プロデュース側が宣伝したいグループ
   expiresAt?: string; // 掲載期限 ISO
   empty?: boolean; // 空きスロット（購入可能）
+  // 表示の出し分け用 (PR / SPONSORED / 空き)。
+  // - admin: 運営が出している宣伝モデル枠 (週次でローテーション)
+  // - user : ユーザー(プロデューサー)が買った枠
+  // - empty: 空きスロット (購入可能)
+  // 旧データには無いので、ロード時に lib/ads.ts の deriveSlotKind() で補完される。
+  slotKind?: "admin" | "user" | "empty";
+  // user 枠で使われた広告アセット (写真撮影成果物) の参照。
+  // 写真館アルバム表示のために endorserIdolId と紐付ける。
+  assetId?: string;
+}
+
+// ====== 広告キャンペーン用 写真撮影アセット ======
+// 「広告を出す前に必ず写真撮影」フェーズを通すための成果物。
+// 1枚撮ると 1 アセットが生成され、ad に貼り付けるか写真館に並べる。
+
+export type AdPhotoMood =
+  | "cool"   // クールでシャープ
+  | "cute"   // ポップでキュート
+  | "edgy"   // エッジ・ストリート
+  | "dreamy"; // 幻想・ドリーミー
+
+export interface AdCampaignAsset {
+  id: string;
+  // 撮影対象 (アイドル / グループ)
+  idolId: string;
+  groupId?: string;
+  ownerAgencyId: string;
+  shotAt: string; // ISO
+  mood: AdPhotoMood;
+  // ビジュアル合成用 (ポスター/看板/写真館で使い回せる)
+  colorA: string;
+  colorB: string;
+  caption: string; // ヘッドライン (短文)
+  // 1 アセットは 1 度の広告掲載で消費される。再利用不可。
+  // 使用済みでも 写真館 (PhotoGallery) に表示され、ファンが入場料で閲覧可能。
+  used: boolean;
+  usedAt?: string; // 広告掲載開始時刻
+  // どの広告スロットに貼られたかのメモ (写真館タイトル用)
+  campaignBrand?: string;
+  campaignProduct?: string;
 }
 
 export interface BankAccount {
@@ -189,6 +229,12 @@ export interface UserProfile {
   house?: RoomState;
   office?: RoomState;
   officeLevel?: OfficeLevel; // 1=自室の一角, 2=小規模事務所, 3=大事務所
+  // 広告キャンペーン用に撮影した素材ストック。
+  // 撮ったが未使用 (used=false) なら街の広告枠に貼れる。
+  // 使用済み (used=true) は写真館アルバムにのみ表示される。
+  adAssets?: AdCampaignAsset[];
+  // 写真館の入場権が有効な期限 (ISO)。ファン側のみ消費。
+  galleryAccessUntil?: string | null;
 }
 
 // ====== 拠点 (家 / 事務所) ======
@@ -341,6 +387,24 @@ export interface UserAvatar {
   };
   // AI 生成時、Claude が推測した印象メモ (UI のコメント表示用)。
   vibe?: string;
+  createdAt: string;
+}
+
+// ====== ゲーム内 AI ファン (NPCFan) ======
+// 経済効果をシミュレートするための仮想ファン。実ユーザーが少ない段階でも、
+// 広告露出→推し認知→グループファン増加→広告売上…のサイクルを回すために使う。
+
+export type FanVibe = "cute" | "cool" | "edgy" | "dreamy";
+
+export interface NPCFan {
+  id: string;
+  country: Country;
+  age: number;       // 13..45 あたり
+  vibe: FanVibe;     // 好きな世界観 (AdPhotoMood と突き合わせ)
+  // 月あたりの推し活予算 (coins 換算)。0 に近いと ROMファン。
+  monthlyBudget: number;
+  // 現在推しているグループ (最大3)
+  biasGroupIds: string[];
   createdAt: string;
 }
 

@@ -12,9 +12,12 @@
  */
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import * as THREE from "three";
 import type { UserAvatar } from "@/lib/types";
+import { useGame } from "@/lib/store";
+import { deriveSlotKind } from "@/lib/ads";
 
 // 決定論的乱数 (seed 固定で街並みを安定させる)
 function mulberry32(seed: number) {
@@ -379,6 +382,128 @@ function Avatar3D({
   );
 }
 
+// ===== 写真館 (街中の 3D 建物。ドアから /gallery に入る) =====
+function PhotoHall() {
+  const { x, z, w, d, h, doorOffsetX, doorW, hue } = PHOTO_HALL;
+  const wallMat = useMemo(
+    () => new THREE.Color(`hsl(${hue}, 50%, 20%)`),
+    []
+  );
+  const accent = useMemo(
+    () => new THREE.Color(`hsl(${(hue + 40) % 360}, 90%, 65%)`),
+    []
+  );
+
+  // 前面 (z + d/2) だけドア開口を作る。左右のパネルで開口を挟む。
+  const frontZ = d / 2 + 0.01;
+  const leftW = (w - doorW) / 2;   // ドア左側のパネル幅
+  const leftCx = -doorW / 2 - leftW / 2 + doorOffsetX;
+  const rightCx = doorW / 2 + leftW / 2 + doorOffsetX;
+
+  // 看板テクスチャ
+  const signTex = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 1024;
+    c.height = 256;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    const g = ctx.createLinearGradient(0, 0, 1024, 0);
+    g.addColorStop(0, "#ff3d8b");
+    g.addColorStop(1, "#ffd166");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 1024, 256);
+    ctx.fillStyle = "#1a0820";
+    ctx.font = "bold 120px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("📷 PHOTO HALL", 512, 128);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+
+  return (
+    <group position={[x, 0, z]}>
+      {/* 背面 */}
+      <mesh position={[0, h / 2, -d / 2]} castShadow receiveShadow>
+        <boxGeometry args={[w, h, 0.3]} />
+        <meshStandardMaterial color={wallMat} />
+      </mesh>
+      {/* 左壁 */}
+      <mesh position={[-w / 2, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.3, h, d]} />
+        <meshStandardMaterial color={wallMat} />
+      </mesh>
+      {/* 右壁 */}
+      <mesh position={[w / 2, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.3, h, d]} />
+        <meshStandardMaterial color={wallMat} />
+      </mesh>
+      {/* 屋根 */}
+      <mesh position={[0, h, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, 0.3, d]} />
+        <meshStandardMaterial color={wallMat} />
+      </mesh>
+      {/* 前面ドア左右のパネル (ドア開口を作るために分割) */}
+      {leftW > 0 && (
+        <mesh
+          position={[leftCx, h / 2, frontZ - 0.01]}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[leftW, h, 0.3]} />
+          <meshStandardMaterial color={wallMat} />
+        </mesh>
+      )}
+      {leftW > 0 && (
+        <mesh
+          position={[rightCx, h / 2, frontZ - 0.01]}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[leftW, h, 0.3]} />
+          <meshStandardMaterial color={wallMat} />
+        </mesh>
+      )}
+      {/* ドア枠 (ネオン) */}
+      <mesh position={[doorOffsetX, h * 0.55, frontZ]}>
+        <planeGeometry args={[doorW + 0.3, h * 0.75]} />
+        <meshStandardMaterial
+          color={accent}
+          emissive={accent}
+          emissiveIntensity={1.3}
+          transparent
+          opacity={0.25}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* 看板 */}
+      {signTex && (
+        <mesh position={[doorOffsetX, h + 0.9, frontZ + 0.2]}>
+          <planeGeometry args={[w * 0.9, 1.6]} />
+          <meshStandardMaterial
+            map={signTex}
+            emissive={"#ffffff"}
+            emissiveMap={signTex}
+            emissiveIntensity={1.1}
+            toneMapped={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+      {/* 入口前の誘導灯 */}
+      <pointLight
+        position={[doorOffsetX, 2.5, frontZ + 1.2]}
+        intensity={1.6}
+        color={accent}
+        distance={10}
+      />
+    </group>
+  );
+}
+
 // ===== ビル =====
 function Building({
   x,
@@ -512,36 +637,58 @@ function Palm({ x, z, scale = 1 }: { x: number; z: number; scale?: number }) {
   );
 }
 
+// ===== 街レイアウト (City と Player で共有) =====
+// 当たり判定のために、ビル群の AABB を両方から参照できるよう module レベルに置く。
+// seed 固定なのでマウントごとに再生成しても同じ並びになる。
+
+export interface BuildingBox {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  h: number;
+  hue: number;
+}
+
+export function makeBuildings(): BuildingBox[] {
+  const rng = mulberry32(7);
+  const out: BuildingBox[] = [];
+  for (let i = 0; i < 80; i++) {
+    const angle = rng() * Math.PI * 2;
+    const dist = 10 + rng() * 55;
+    const x = Math.cos(angle) * dist;
+    const z = Math.sin(angle) * dist;
+    // 道路 (中央 ±3.5) を避ける
+    if (Math.abs(x) < 4) continue;
+    out.push({
+      x,
+      z,
+      w: 3 + rng() * 5,
+      d: 3 + rng() * 5,
+      h: 6 + rng() * 26,
+      hue: 250 + (rng() - 0.5) * 110,
+    });
+  }
+  return out;
+}
+
+// 写真館: 街の特定位置に固定配置。前面 (z+d/2) 中央に 2m のドア開口がある。
+// 中に入ろうとしたプレイヤーは、このドア帯 (doorX ± doorW/2) だけが通過可能。
+// プレイヤーが開口を抜けて内側に立つと「入場トリガー」が発火し /gallery へ遷移。
+export const PHOTO_HALL = {
+  x: -14,    // 左側の街区
+  z: -12,
+  w: 9,
+  d: 6,
+  h: 7,
+  doorOffsetX: 0, // 建物中心からのズレ
+  doorW: 2.4,
+  hue: 320,
+};
+
 // ===== 街全体 =====
 function City() {
-  const buildings = useMemo(() => {
-    const rng = mulberry32(7);
-    const out: {
-      x: number;
-      z: number;
-      w: number;
-      d: number;
-      h: number;
-      hue: number;
-    }[] = [];
-    for (let i = 0; i < 80; i++) {
-      const angle = rng() * Math.PI * 2;
-      const dist = 10 + rng() * 55;
-      const x = Math.cos(angle) * dist;
-      const z = Math.sin(angle) * dist;
-      // 道路 (中央 ±3.5) を避ける
-      if (Math.abs(x) < 4) continue;
-      out.push({
-        x,
-        z,
-        w: 3 + rng() * 5,
-        d: 3 + rng() * 5,
-        h: 6 + rng() * 26,
-        hue: 250 + (rng() - 0.5) * 110,
-      });
-    }
-    return out;
-  }, []);
+  const buildings = useMemo(() => makeBuildings(), []);
 
   const palms = useMemo(() => {
     const out: { x: number; z: number; s: number }[] = [];
@@ -596,14 +743,90 @@ function City() {
       {buildings.map((b, i) => (
         <Building key={i} {...b} />
       ))}
+      {/* 写真館 (MarinLuna Photo Hall) */}
+      <PhotoHall />
       {/* ヤシ並木 */}
       {palms.map((p, i) => (
         <Palm key={i} x={p.x} z={p.z} scale={p.s} />
       ))}
-      {/* 巨大ホログラム看板 (中央広場の上) */}
-      <Billboard x={0} y={14} z={-30} text="K-POP × LA" />
-      <Billboard x={0} y={12} z={30} text="RISE TO FAME" />
+      {/* 巨大ホログラム看板 (運営の世界観コピー) */}
+      <Billboard
+        x={0}
+        y={14}
+        z={-30}
+        text="MarinLuna"
+        subText="Rise to Fame"
+        colorA="#ff3d8b"
+        colorB="#7b2cff"
+      />
+      <Billboard
+        x={0}
+        y={12}
+        z={30}
+        text="📍 Seoul"
+        subText="K-POP × LA STREET"
+        colorA="#00e6ff"
+        colorB="#7b2cff"
+        rotationY={Math.PI}
+      />
+
+      {/* 街の広告枠 (admin/user/empty を slotKind バッジ付きで表示) */}
+      <CityAdBoards />
     </group>
+  );
+}
+
+/**
+ * Zustand から ads を取り、ビル群の隙間にビルボードを配置する。
+ * placement="billboard" の枠だけ採用 (路面店/バスは将来別オブジェクト化)。
+ */
+function CityAdBoards() {
+  const ads = useGame((s) => s.ads);
+  const groups = useGame((s) => s.groups);
+
+  // billboard 枠を最大 6 枚まで街中に並べる。
+  const items = useMemo(() => {
+    const billboards = ads.filter((a) => a.placement === "billboard").slice(0, 6);
+    return billboards.map((ad, i) => {
+      const angle = (i / Math.max(1, billboards.length)) * Math.PI * 2;
+      const r = 22;
+      const px = Math.cos(angle) * r;
+      const pz = Math.sin(angle) * r;
+      // ビル群の隙間を埋めるので、ビルの肩高 8m あたり
+      const py = 9 + (i % 2) * 1.4;
+      return { ad, px, pz, py, rotY: -angle + Math.PI / 2 };
+    });
+  }, [ads]);
+
+  return (
+    <>
+      {items.map(({ ad, px, py, pz, rotY }) => {
+        const kind = deriveSlotKind(ad);
+        const sponsor =
+          kind === "user"
+            ? groups.find((g) => g.id === ad.promoteGroupId)?.name
+            : undefined;
+        const text = kind === "empty" ? "AD SPACE" : ad.brand;
+        const sub = kind === "empty" ? "募集中" : ad.product;
+        return (
+          <Billboard
+            key={ad.id}
+            x={px}
+            y={py}
+            z={pz}
+            rotationY={rotY}
+            text={text}
+            subText={sub}
+            colorA={ad.colorA}
+            colorB={ad.colorB}
+            slotKind={kind}
+            sponsor={sponsor}
+            width={10}
+            height={2.6}
+          />
+        );
+      })}
+    </>
   );
 }
 
@@ -612,11 +835,28 @@ function Billboard({
   y,
   z,
   text,
+  subText,
+  colorA = "#ff3d8b",
+  colorB = "#7b2cff",
+  slotKind,
+  sponsor,
+  rotationY = 0,
+  width = 14,
+  height = 3.5,
 }: {
   x: number;
   y: number;
   z: number;
   text: string;
+  subText?: string;
+  colorA?: string;
+  colorB?: string;
+  // 表示バッジ: admin → "PR", user → "SPONSORED by 〇〇", empty → "AVAILABLE"
+  slotKind?: "admin" | "user" | "empty";
+  sponsor?: string;
+  rotationY?: number;
+  width?: number;
+  height?: number;
 }) {
   // 単純なエミッシブ板。文字は CanvasTexture で焼き込む。
   const tex = useMemo(() => {
@@ -627,23 +867,52 @@ function Billboard({
     const ctx = c.getContext("2d");
     if (!ctx) return null;
     const grad = ctx.createLinearGradient(0, 0, 1024, 0);
-    grad.addColorStop(0, "#ff3d8b");
-    grad.addColorStop(1, "#7b2cff");
+    grad.addColorStop(0, colorA);
+    grad.addColorStop(1, colorB);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 1024, 256);
+
+    // メインテキスト
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 140px sans-serif";
+    ctx.font = subText ? "bold 110px sans-serif" : "bold 140px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, 512, 128);
+    ctx.fillText(text, 512, subText ? 100 : 128);
+
+    if (subText) {
+      ctx.font = "600 52px sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillText(subText, 512, 188);
+    }
+
+    // 左上の slotKind バッジ
+    if (slotKind) {
+      const badge =
+        slotKind === "admin"
+          ? "PR"
+          : slotKind === "user"
+            ? `SPONSORED${sponsor ? ` by ${sponsor}` : ""}`
+            : "AVAILABLE";
+      ctx.font = "bold 28px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      const padX = 18;
+      const padY = 10;
+      const textW = ctx.measureText(badge).width;
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(16, 16, textW + padX * 2, 48);
+      ctx.fillStyle = "#ffd166";
+      ctx.fillText(badge, 16 + padX, 16 + padY);
+    }
+
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
-  }, [text]);
+  }, [text, subText, colorA, colorB, slotKind, sponsor]);
 
   return (
-    <mesh position={[x, y, z]}>
-      <planeGeometry args={[14, 3.5]} />
+    <mesh position={[x, y, z]} rotation={[0, rotationY, 0]}>
+      <planeGeometry args={[width, height]} />
       <meshStandardMaterial
         map={tex ?? undefined}
         emissive={"#ffffff"}
@@ -657,18 +926,63 @@ function Billboard({
 }
 
 // ===== プレイヤー (アバター + 物理移動 + 三人称カメラ) =====
+// プレイヤー半径 (AABB 衝突判定用)。アバターの胴体幅に合わせる。
+const PLAYER_RADIUS = 0.45;
+
+/**
+ * AABB 衝突チェック。与えられた (px, pz) がどれかのビル矩形を侵すか。
+ * 写真館だけは「ドア開口内」なら侵入許可 (通過できる)。
+ */
+function collidesBuildings(
+  px: number,
+  pz: number,
+  buildings: BuildingBox[]
+): boolean {
+  const r = PLAYER_RADIUS;
+  // 通常ビル
+  for (const b of buildings) {
+    if (
+      Math.abs(px - b.x) < b.w / 2 + r &&
+      Math.abs(pz - b.z) < b.d / 2 + r
+    ) {
+      return true;
+    }
+  }
+  // 写真館: ドア開口を除いた壁のみブロック。
+  const h = PHOTO_HALL;
+  const dxh = px - h.x;
+  const dzh = pz - h.z;
+  const inBounds =
+    Math.abs(dxh) < h.w / 2 + r && Math.abs(dzh) < h.d / 2 + r;
+  if (inBounds) {
+    // ドア帯 (前面、z > h.z + h.d/2 - thickness の付近、|dx - doorOffsetX| < doorW/2)
+    const nearFront = dzh > h.d / 2 - r - 0.4; // 前面 ±壁厚
+    const inDoorStrip = Math.abs(dxh - h.doorOffsetX) < h.doorW / 2 - r * 0.5;
+    if (nearFront && inDoorStrip) {
+      // ドア通過中 → 非衝突
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 function Player({
   avatar,
   input,
+  onEnterGallery,
 }: {
   avatar: UserAvatar;
   input: React.MutableRefObject<InputState>;
+  onEnterGallery?: () => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const yawRef = useRef(0); // アバターの向き
   const walkRef = useRef(0); // アニメ位相
   const posRef = useRef(new THREE.Vector3(0, 0, 4));
+  const insideHallRef = useRef(false); // エッジトリガー用
   const { camera } = useThree();
+  const buildings = useMemo(() => makeBuildings(), []);
 
   useFrame((_, dt) => {
     const dtc = Math.min(dt, 0.05); // 大きい dt はクランプ
@@ -696,16 +1010,25 @@ function Player({
       dz = (rightZ * jx + forwardZ * -jy) * speed * dtc;
     }
 
-    posRef.current.x = THREE.MathUtils.clamp(
-      posRef.current.x + dx,
-      -70,
-      70
-    );
-    posRef.current.z = THREE.MathUtils.clamp(
-      posRef.current.z + dz,
-      -90,
-      90
-    );
+    // スライド衝突: X/Z 軸を独立に試して、壁にぶつかった軸だけ戻す
+    const nextX = THREE.MathUtils.clamp(posRef.current.x + dx, -70, 70);
+    const nextZ = THREE.MathUtils.clamp(posRef.current.z + dz, -90, 90);
+    if (!collidesBuildings(nextX, posRef.current.z, buildings)) {
+      posRef.current.x = nextX;
+    }
+    if (!collidesBuildings(posRef.current.x, nextZ, buildings)) {
+      posRef.current.z = nextZ;
+    }
+
+    // 写真館の内側に入った瞬間だけ遷移 (エッジトリガー)
+    const h = PHOTO_HALL;
+    const insideHall =
+      Math.abs(posRef.current.x - h.x) < h.w / 2 - PLAYER_RADIUS &&
+      Math.abs(posRef.current.z - h.z) < h.d / 2 - PLAYER_RADIUS;
+    if (insideHall && !insideHallRef.current && onEnterGallery) {
+      onEnterGallery();
+    }
+    insideHallRef.current = insideHall;
 
     // アバターの向きを移動方向にスムーズ追従
     if (mag > 0.1) {
@@ -759,9 +1082,11 @@ function Player({
 function SceneInner({
   avatar,
   input,
+  onEnterGallery,
 }: {
   avatar: UserAvatar;
   input: React.MutableRefObject<InputState>;
+  onEnterGallery?: () => void;
 }) {
   const { scene } = useThree();
   useEffect(() => {
@@ -784,7 +1109,7 @@ function SceneInner({
       <pointLight position={[10, 6, -8]} intensity={1.2} color="#7b2cff" distance={30} />
       <pointLight position={[-10, 6, 10]} intensity={1.2} color="#00e6ff" distance={30} />
       <City />
-      <Player avatar={avatar} input={input} />
+      <Player avatar={avatar} input={input} onEnterGallery={onEnterGallery} />
     </>
   );
 }
@@ -837,7 +1162,12 @@ function useKeyboardMove(input: React.MutableRefObject<InputState>) {
 // ===== 公開: City3D 本体 =====
 export function City3D({ avatar }: { avatar: UserAvatar }) {
   const inputRef = useRef<InputState>(makeInputState());
+  const router = useRouter();
   useKeyboardMove(inputRef);
+
+  const handleEnterGallery = useCallback(() => {
+    router.push("/gallery");
+  }, [router]);
 
   return (
     <div className="absolute inset-0 z-0 select-none">
@@ -847,7 +1177,7 @@ export function City3D({ avatar }: { avatar: UserAvatar }) {
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
-        <SceneInner avatar={avatar} input={inputRef} />
+        <SceneInner avatar={avatar} input={inputRef} onEnterGallery={handleEnterGallery} />
       </Canvas>
 
       {/* オーバーレイ操作 */}

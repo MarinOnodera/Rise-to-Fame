@@ -60,6 +60,8 @@ export default function HomePage() {
     setMode,
     deliverDailyMessages,
     tickIdolPosts,
+    tickAdsRollover,
+    tickAdEconomy,
     completeTutorial,
   } = useGame();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -72,8 +74,16 @@ export default function HomePage() {
       if (user.mode === null) setMode("fan");
       void deliverDailyMessages();
       void tickIdolPosts();
+      // 週またぎ判定 + 期限切れ user 広告枠の整理 (idempotent)
+      tickAdsRollover();
+      // AI ファン経済シミュレーション (1h 単位 idempotent)
+      tickAdEconomy();
     }
-  }, [user, router, setMode, deliverDailyMessages, tickIdolPosts]);
+  }, [
+    user, router, setMode,
+    deliverDailyMessages, tickIdolPosts,
+    tickAdsRollover, tickAdEconomy,
+  ]);
 
   // 横画面ロックを試行。ユーザー操作が必要な環境のために、
   // 初回 pointerdown でも再試行する (gesture scope 内だと通る)。

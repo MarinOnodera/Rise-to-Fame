@@ -178,6 +178,43 @@ export const AD_SLOT_PRICES = {
 export const AD_DURATION_DAYS = 7;
 
 /**
+ * 広告キャンペーン用 写真撮影コスト (mood ごと)。
+ *
+ * 設計意図:
+ *  - コンサート (local 300 / mid 2000 / large 6000 / solo 18000) に対し、
+ *    撮影は「日帰り〜1日仕事」のスケール感なのでローカル〜ミッド帯に収める。
+ *  - mood の手数 (照明・スタイリング・セットの規模) で価格を差別化:
+ *      cute   = 800   (簡易スタジオ・1ルック)
+ *      cool   = 1500  (照明スタッフ追加・モノトーン)
+ *      edgy   = 2200  (ロケ撮・ストリートスタイリング)
+ *      dreamy = 3500  (霧/水/長時間露光・凝った美術)
+ *  - billboard (5000) を取るには大体 dreamy + edgy を 2 ストック ＝ 5700 前後で
+ *    「広告総コスト ≒ 中規模ライブ 1 本」程度に揃える。
+ */
+import type { AdPhotoMood } from "./types";
+export const PHOTOSHOOT_COSTS: Record<AdPhotoMood, number> = {
+  cute: 800,
+  cool: 1500,
+  edgy: 2200,
+  dreamy: 3500,
+};
+
+export const PHOTOSHOOT_LABELS: Record<AdPhotoMood, string> = {
+  cute: "キュート",
+  cool: "クール",
+  edgy: "エッジ",
+  dreamy: "ドリーミー",
+};
+
+// 撮影に伴う疲労 (アイドル単位)。コンサートより軽め。
+export const PHOTOSHOOT_FATIGUE: Record<AdPhotoMood, number> = {
+  cute: 4,
+  cool: 6,
+  edgy: 8,
+  dreamy: 10,
+};
+
+/**
  * 投げ銭/プレゼント10段階。いつでも推しアイドルに贈れる。
  * 贈ると推しの人気が上昇し、所属事務所に20%還元される。
  */

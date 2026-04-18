@@ -26,11 +26,23 @@ import {
   coinsToJpy,
   GIFTS,
   LOAN_OFFERS,
+  PHOTOSHOOT_COSTS,
+  PHOTOSHOOT_FATIGUE,
   PRODUCER_SHARE,
 } from "./economy";
-import type { AuditionCandidate, IdolPost, Loan, PostKind } from "./types";
+import type {
+  AuditionCandidate,
+  IdolPost,
+  Loan,
+  PostKind,
+  AdCampaignAsset,
+  AdPhotoMood,
+  NPCFan,
+} from "./types";
 import { contractSuccessRate } from "./contracts";
 import { readBackup, writeBackup, type UserBackup } from "./persistence";
+import { rolloverAdsIfNeeded, deriveSlotKind } from "./ads";
+import { generateNpcFans, simulateAdEconomyTick } from "./fans";
 
 interface State {
   initialized: boolean;
@@ -39,6 +51,11 @@ interface State {
   idols: Idol[];
   ads: CityAd[];
   posts: IdolPost[];
+  // 広告の週次ローテーションを最後に適用した時刻 (JST 月曜境界判定用)
+  adsLastRolloverAt: string | null;
+  // ゲーム内 AI ファンプール (経済シミュレーション用)
+  npcFans: NPCFan[];
+  adEconomyLastTickAt: string | null;
   // actions
   initWorld: () => void;
   registerUser: (nickname: string, displayName: string) => void;
@@ -80,8 +97,16 @@ interface State {
     promoteGroupId: string,
     brand: string,
     product: string,
-    tagline: string
+    tagline: string,
+    assetId?: string
   ) => { ok: boolean; reason?: string };
+  // 広告撮影: 自社アイドルに mood 指定で 1 アセットを生成する。
+  // 戻り値の asset を続いて buyAdSlot に渡せば 1 度だけ広告に使える。
+  bookPhotoShoot: (
+    idolId: string,
+    mood: AdPhotoMood,
+    caption?: string
+  ) => { ok: boolean; reason?: string; asset?: AdCampaignAsset };
   // SNS / 配信
   tickIdolPosts: () => Promise<void>; // 1日1〜2投稿の候補生成
   approvePost: (postId: string, approved: boolean) => void;
@@ -93,6 +118,12 @@ interface State {
   moveRoomItem: (target: "house" | "office", id: string, x: number, y: number) => void;
   setRoomHue: (target: "house" | "office", wallHue: number, floorHue: number) => void;
   upgradeOffice: () => { ok: boolean; reason?: string; newLevel?: OfficeLevel };
+  // 広告ローテーション (週次 admin 再抽選 + user 期限切れ整理)。idempotent。
+  tickAdsRollover: () => void;
+  // 広告経済シミュレーション (日次ティック)。idempotent。
+  tickAdEconomy: () => void;
+  // 写真館の入場料を支払う。当日いっぱい入場権が有効。
+  payGalleryEntry: (price: number) => { ok: boolean; reason?: string };
 }
 
 // ====== 拠点のデフォルト生成 ======
@@ -143,11 +174,26 @@ export const useGame = create<State>()(
       idols: [],
       ads: [],
       posts: [],
+      adsLastRolloverAt: null,
+      npcFans: [],
+      adEconomyLastTickAt: null,
 
       initWorld: () => {
         if (get().initialized) return;
         const { groups, idols, ads } = buildDefaultWorld();
-        set({ groups, idols, ads, initialized: true });
+        // 起動時にいきなり 1 回ロールしておけば、初回ホーム表示で
+        // tickAdsRollover を待たずに admin 枠が Top10 から正しい endorser を持つ。
+        const r = rolloverAdsIfNeeded({ ads, idols, lastRolloverAt: null });
+        // AI ファンプール: 300 人で 統計の振れを抑える。persist 容量は ~50KB 前後。
+        const npcFans = generateNpcFans(300, 1337);
+        set({
+          groups,
+          idols,
+          ads: r.ads,
+          initialized: true,
+          adsLastRolloverAt: r.appliedBoundary,
+          npcFans,
+        });
       },
 
       registerUser: (nickname, displayName) => {
@@ -180,6 +226,7 @@ export const useGame = create<State>()(
             house: defaultHouse(),
             office: defaultOffice(),
             officeLevel: 1,
+            adAssets: [],
           },
         });
       },
@@ -219,6 +266,7 @@ export const useGame = create<State>()(
             house: defaultHouse(),
             office: defaultOffice(),
             officeLevel: 1,
+            adAssets: [],
           },
         });
       },
@@ -799,7 +847,7 @@ export const useGame = create<State>()(
         set({ posts });
       },
 
-      buyAdSlot: (adId, promoteGroupId, brand, product, tagline) => {
+      buyAdSlot: (adId, promoteGroupId, brand, product, tagline, assetId) => {
         const u = get().user;
         if (!u || !u.agencyId) return { ok: false, reason: "事務所がありません" };
         const ad = get().ads.find((a) => a.id === adId);
@@ -810,12 +858,36 @@ export const useGame = create<State>()(
         const group = get().groups.find((g) => g.id === promoteGroupId);
         if (!group || group.agencyId !== u.agencyId)
           return { ok: false, reason: "自分のグループを指定してください" };
-        const endorser = get().idols.find(
-          (i) => i.groupId === promoteGroupId && i.debuted
-        );
+
+        // 写真撮影アセットは必須 (権利＝1週間, 1 アセット = 1 掲載)。
+        const assets = u.adAssets ?? [];
+        const asset = assetId ? assets.find((a) => a.id === assetId) : undefined;
+        if (!asset) {
+          return {
+            ok: false,
+            reason: "撮影済みの広告素材が必要です。先に写真撮影を実施してください。",
+          };
+        }
+        if (asset.used) {
+          return { ok: false, reason: "この素材は既に使用済みです" };
+        }
+        if (asset.ownerAgencyId !== u.agencyId) {
+          return { ok: false, reason: "他事務所の素材は使えません" };
+        }
+        // 素材のアイドルは promoteGroupId に所属している必要がある
+        const assetIdol = get().idols.find((i) => i.id === asset.idolId);
+        if (!assetIdol || assetIdol.groupId !== promoteGroupId) {
+          return {
+            ok: false,
+            reason: "選んだ素材のアイドルが宣伝対象グループに所属していません",
+          };
+        }
+
         const expiresAt = new Date(
           Date.now() + AD_DURATION_DAYS * 86400000
         ).toISOString();
+        const usedAt = new Date().toISOString();
+
         const ads = get().ads.map((a) =>
           a.id === adId
             ? {
@@ -823,19 +895,36 @@ export const useGame = create<State>()(
                 brand,
                 product,
                 tagline,
-                colorA: group.colorA,
-                colorB: group.colorB,
+                // ポスターは素材カラーを優先 (撮影で決めた世界観を尊重)
+                colorA: asset.colorA,
+                colorB: asset.colorB,
                 empty: false,
+                slotKind: "user" as const,
                 ownerAgencyId: u.agencyId,
                 promoteGroupId,
-                endorserIdolId: endorser?.id,
+                endorserIdolId: asset.idolId,
+                assetId: asset.id,
                 expiresAt,
               }
             : a
         );
+
+        // 使用済みフラグ + キャンペーン情報を素材に転記 (写真館表示用)
+        const adAssets = assets.map((x) =>
+          x.id === asset.id
+            ? {
+                ...x,
+                used: true,
+                usedAt,
+                campaignBrand: brand,
+                campaignProduct: product,
+              }
+            : x
+        );
+
         set({
           ads,
-          user: { ...u, coins: u.coins - price },
+          user: { ...u, coins: u.coins - price, adAssets },
         });
         return { ok: true };
       },
@@ -898,6 +987,84 @@ export const useGame = create<State>()(
           },
         });
         return { ok: true, revenueCoins };
+      },
+
+      bookPhotoShoot: (idolId, mood, caption) => {
+        const u = get().user;
+        if (!u || !u.agencyId)
+          return { ok: false, reason: "事務所がありません" };
+        const idol = get().idols.find((i) => i.id === idolId);
+        if (!idol) return { ok: false, reason: "アイドルが見つかりません" };
+        const group = idol.groupId
+          ? get().groups.find((g) => g.id === idol.groupId)
+          : undefined;
+        if (!group || group.agencyId !== u.agencyId)
+          return { ok: false, reason: "自分のグループのアイドルを選んでください" };
+        const cost = PHOTOSHOOT_COSTS[mood];
+        if (u.coins < cost) return { ok: false, reason: "コインが足りません" };
+        if (idol.fatigue >= 90)
+          return { ok: false, reason: "疲労が限界です。休ませてから再撮影を" };
+
+        // mood ごとのカラーパレット (色相の温度感を変えてポスターらしく)
+        const moodPalette: Record<
+          AdPhotoMood,
+          { a: string; b: string }
+        > = {
+          cool: { a: "#0b1430", b: "#00e5ff" },
+          cute: { a: "#ff8ecb", b: "#fff0b3" },
+          edgy: { a: "#1a1a1a", b: "#ff3d8b" },
+          dreamy: { a: "#3a1a5c", b: "#ffd6f0" },
+        };
+        const grpPal = { a: group.colorA, b: group.colorB };
+        // 50% でグループカラーに寄せる (ポスターとしての統一感)
+        const usePal = Math.random() < 0.5 ? grpPal : moodPalette[mood];
+
+        // caption 自動生成 (空ならランダムテンプレ)
+        const TEMPLATES: Record<AdPhotoMood, string[]> = {
+          cool: ["ただ立つ、それだけで強い。", "光は黙って彼/彼女を選ぶ。", "クールは、説明しない。"],
+          cute: ["今日の気分、ハートひとつ。", "笑顔って、最強アイテム。", "甘いだけじゃ、終わらない。"],
+          edgy: ["街を、塗り替えにいく。", "削ぎ落として、芯だけ残す。", "世界の角から、世界を見る。"],
+          dreamy: ["夢のなかで、また会おう。", "霧の向こうの、まだ見ぬ私。", "やわらかく、強く、輝く。"],
+        };
+        const cap =
+          (caption && caption.trim()) ||
+          TEMPLATES[mood][Math.floor(Math.random() * TEMPLATES[mood].length)];
+
+        const asset: AdCampaignAsset = {
+          id: newId("ast_"),
+          idolId,
+          groupId: idol.groupId,
+          ownerAgencyId: u.agencyId,
+          shotAt: new Date().toISOString(),
+          mood,
+          colorA: usePal.a,
+          colorB: usePal.b,
+          caption: cap,
+          used: false,
+        };
+
+        // 撮影によるアイドル疲労増 + 微小な人気上昇 (露出効果の地ならし)
+        const fatigueAdd = PHOTOSHOOT_FATIGUE[mood];
+        const idols = get().idols.map((i) =>
+          i.id === idolId
+            ? {
+                ...i,
+                fatigue: Math.min(100, i.fatigue + fatigueAdd),
+                popularity: Math.min(100, i.popularity + 1),
+              }
+            : i
+        );
+
+        set({
+          idols,
+          user: {
+            ...u,
+            coins: u.coins - cost,
+            effort: u.effort + 2,
+            adAssets: [asset, ...(u.adAssets ?? [])].slice(0, 50),
+          },
+        });
+        return { ok: true, asset };
       },
 
       // ====== 家 / 事務所 ======
@@ -999,10 +1166,113 @@ export const useGame = create<State>()(
         });
         return { ok: true, newLevel: nextLevel };
       },
+
+      tickAdsRollover: () => {
+        const s = get();
+        const r = rolloverAdsIfNeeded({
+          ads: s.ads,
+          idols: s.idols,
+          lastRolloverAt: s.adsLastRolloverAt,
+        });
+        if (!r.changed && s.adsLastRolloverAt === r.appliedBoundary) return;
+        set({ ads: r.ads, adsLastRolloverAt: r.appliedBoundary });
+      },
+
+      tickAdEconomy: () => {
+        const s = get();
+        if (s.npcFans.length === 0) return;
+        const now = new Date();
+        const lastMs = s.adEconomyLastTickAt
+          ? new Date(s.adEconomyLastTickAt).getTime()
+          : now.getTime() - 24 * 3_600_000; // 初回は丸 1 日分 = 満額回らない値
+        const hoursSinceLast = Math.max(0, (now.getTime() - lastMs) / 3_600_000);
+        // 1 日に 1 回以上まとめて回らない (乱用防止 + 頻発レンダ回避)
+        if (hoursSinceLast < 1) return;
+
+        const r = simulateAdEconomyTick({
+          ads: s.ads,
+          groups: s.groups,
+          idols: s.idols,
+          fans: s.npcFans,
+          hoursSinceLast,
+          now,
+        });
+
+        // グループへの fanCount 加算
+        const groups =
+          Object.keys(r.groupFanDelta).length > 0
+            ? s.groups.map((g) => {
+                const d = r.groupFanDelta[g.id];
+                if (!d) return g;
+                return {
+                  ...g,
+                  fanCount: g.fanCount + d,
+                  popularity: Math.min(100, g.popularity + Math.min(1, Math.ceil(d / 40))),
+                };
+              })
+            : s.groups;
+
+        // アイドルの popularity 加算
+        const idols =
+          Object.keys(r.idolPopDelta).length > 0
+            ? s.idols.map((i) => {
+                const d = r.idolPopDelta[i.id];
+                if (!d) return i;
+                return { ...i, popularity: Math.min(100, i.popularity + d) };
+              })
+            : s.idols;
+
+        // ユーザー事務所への売上 (jpy)
+        let user = s.user;
+        if (user && user.agencyId) {
+          const jpy = r.agencyPayoutJpy[user.agencyId];
+          if (jpy && jpy > 0) {
+            user = {
+              ...user,
+              payoutEarnedJpy: user.payoutEarnedJpy + Math.floor(jpy),
+            };
+          }
+        }
+
+        set({
+          groups,
+          idols,
+          npcFans: r.fans,
+          adEconomyLastTickAt: now.toISOString(),
+          ...(user !== s.user ? { user } : {}),
+        });
+      },
+
+      payGalleryEntry: (price) => {
+        const u = get().user;
+        if (!u) return { ok: false, reason: "未ログイン" };
+        if (price < 10 || price > 15)
+          return { ok: false, reason: "入場料が不正です" };
+        // 既に当日入場権を持っているなら追加課金しない (UX 配慮)
+        const now = Date.now();
+        if (
+          u.galleryAccessUntil &&
+          new Date(u.galleryAccessUntil).getTime() > now
+        ) {
+          return { ok: true };
+        }
+        if (u.coins < price) return { ok: false, reason: "コインが足りません" };
+        // 当日 23:59:59 (ローカル) まで有効
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        set({
+          user: {
+            ...u,
+            coins: u.coins - price,
+            galleryAccessUntil: end.toISOString(),
+          },
+        });
+        return { ok: true };
+      },
     }),
     {
       name: "rise-to-fame-v2",
-      version: 5,
+      version: 6,
       // 既存のアイドル/グループ/ユーザーデータを失わないよう、スキーマ拡張時はdefault値を注入する。
       // 重要: ここでエラーを投げると state がリセットされ、再ログイン画面に戻ってしまう。
       // どんな形式でも落ちずに足りない field を埋めるスタンスで実装する。
@@ -1025,6 +1295,7 @@ export const useGame = create<State>()(
             if (!user.house) user.house = defaultHouse();
             if (!user.office) user.office = defaultOffice();
             if (typeof user.officeLevel !== "number") user.officeLevel = 1;
+            if (!Array.isArray(user.adAssets)) user.adAssets = [];
             if (typeof user.createdAt !== "string") user.createdAt = now;
             if (typeof user.displayName !== "string" || !user.displayName) {
               user.displayName = (user.nickname as string) ?? "";
@@ -1069,6 +1340,26 @@ export const useGame = create<State>()(
           if (!Array.isArray(s.groups)) s.groups = [];
           if (!Array.isArray(s.posts)) s.posts = [];
           if (typeof s.initialized !== "boolean") s.initialized = false;
+          // 旧 ads (slotKind 未付与) は deriveSlotKind() で補完。
+          // 重い rollover はここでは走らせない (idols 並びが不確定なため
+          // ハイドレート完了後に tickAdsRollover() を別途呼ぶ)。
+          if (Array.isArray(s.ads)) {
+            s.ads = (s.ads as CityAd[]).map((a) =>
+              a && a.slotKind === undefined
+                ? { ...a, slotKind: deriveSlotKind(a) }
+                : a
+            );
+          }
+          if (typeof s.adsLastRolloverAt !== "string" && s.adsLastRolloverAt !== null) {
+            s.adsLastRolloverAt = null;
+          }
+          // 旧セーブデータには npcFans が無いのでここで補給
+          if (!Array.isArray(s.npcFans) || (s.npcFans as unknown[]).length === 0) {
+            s.npcFans = generateNpcFans(300, 1337);
+          }
+          if (typeof s.adEconomyLastTickAt !== "string" && s.adEconomyLastTickAt !== null) {
+            s.adEconomyLastTickAt = null;
+          }
           void fromVersion;
           return s as unknown;
         } catch (e) {
