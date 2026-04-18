@@ -504,27 +504,13 @@ function PhotoHall() {
   );
 }
 
-// ===== ビル =====
+// ===== ビル (ガラス素材 + ネオン縁取り) =====
 function Building({
-  x,
-  z,
-  w,
-  d,
-  h,
-  hue,
-  label,
-  type,
+  x, z, w, d, h, hue, label, type, skyline,
 }: BuildingBox) {
-  const base = useMemo(
-    () => new THREE.Color(`hsl(${hue}, 35%, 14%)`),
-    [hue]
-  );
-  const accent = useMemo(
-    () => new THREE.Color(`hsl(${(hue + 40) % 360}, 90%, 60%)`),
-    [hue]
-  );
+  const glass = useMemo(() => new THREE.Color(`hsl(${hue}, 45%, 18%)`), [hue]);
+  const accent = useMemo(() => new THREE.Color(`hsl(${(hue + 40) % 360}, 95%, 65%)`), [hue]);
 
-  // 看板テクスチャ (label がある建物のみ)
   const signTex = useMemo(() => {
     if (!label || typeof document === "undefined") return null;
     const c = document.createElement("canvas");
@@ -532,25 +518,18 @@ function Building({
     c.height = 128;
     const ctx = c.getContext("2d");
     if (!ctx) return null;
-    // 背景: ビルの accent 色に合わせたグラデーション
-    const g = ctx.createLinearGradient(0, 0, 512, 0);
-    const acHex = `hsl(${(hue + 40) % 360}, 90%, 25%)`;
-    const acHex2 = `hsl(${(hue + 80) % 360}, 80%, 15%)`;
-    g.addColorStop(0, acHex);
-    g.addColorStop(1, acHex2);
-    ctx.fillStyle = g;
+    ctx.fillStyle = `hsla(${hue}, 50%, 8%, 0.9)`;
     ctx.fillRect(0, 0, 512, 128);
-    // 枠線 (ネオン風)
-    ctx.strokeStyle = `hsl(${(hue + 40) % 360}, 100%, 70%)`;
-    ctx.lineWidth = 4;
-    ctx.strokeRect(4, 4, 504, 120);
-    // テキスト
+    const neonHex = `hsl(${(hue + 40) % 360}, 100%, 70%)`;
+    ctx.strokeStyle = neonHex;
+    ctx.lineWidth = 5;
+    ctx.strokeRect(6, 6, 500, 116);
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 48px sans-serif";
+    ctx.font = "bold 46px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.shadowColor = `hsl(${(hue + 40) % 360}, 100%, 60%)`;
-    ctx.shadowBlur = 12;
+    ctx.shadowColor = neonHex;
+    ctx.shadowBlur = 18;
     ctx.fillText(label, 256, 64);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
@@ -562,127 +541,79 @@ function Building({
 
   return (
     <group position={[x, h / 2, z]}>
+      {/* ガラス風ボディ */}
       <mesh castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color={base} />
+        <meshStandardMaterial color={glass} metalness={0.7} roughness={0.15} />
       </mesh>
-      {/* 上部ネオン帯 (前面) */}
-      <mesh position={[0, h / 2 - 0.2, d / 2 + 0.02]}>
-        <planeGeometry args={[w * 0.85, 0.3]} />
-        <meshStandardMaterial
-          color={accent}
-          emissive={accent}
-          emissiveIntensity={2.4}
-          toneMapped={false}
-        />
+      {/* 4辺の縦ネオンエッジ */}
+      {[[-1,-1],[1,-1],[1,1],[-1,1]].map(([sx,sz], i) => (
+        <mesh key={`e${i}`} position={[sx * w / 2, 0, sz * d / 2]}>
+          <boxGeometry args={[0.06, h * 0.95, 0.06]} />
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.5} toneMapped={false} />
+        </mesh>
+      ))}
+      {/* 上部ネオン帯 (前面 + 側面) */}
+      <mesh position={[0, h / 2 - 0.15, d / 2 + 0.02]}>
+        <planeGeometry args={[w * 0.95, 0.2]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.8} toneMapped={false} />
       </mesh>
-      {/* 上部ネオン帯 (側面) */}
-      <mesh
-        position={[w / 2 + 0.02, 0, 0]}
-        rotation={[0, Math.PI / 2, 0]}
-      >
-        <planeGeometry args={[d * 0.85, 0.3]} />
-        <meshStandardMaterial
-          color={accent}
-          emissive={accent}
-          emissiveIntensity={2}
-          toneMapped={false}
-        />
+      <mesh position={[w / 2 + 0.02, h / 2 - 0.15, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[d * 0.95, 0.2]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.2} toneMapped={false} />
       </mesh>
-      {/* 窓 */}
-      <Windows w={w} h={h} d={d} hue={hue} />
-      {/* 看板 (ラベル付きビルのみ) */}
+      {/* 下部ネオンライン */}
+      <mesh position={[0, -h / 2 + 0.08, d / 2 + 0.02]}>
+        <planeGeometry args={[w * 0.9, 0.1]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.5} toneMapped={false} />
+      </mesh>
+      {/* 窓 (遠景ビルはスキップ) */}
+      {!skyline && <Windows w={w} h={h} d={d} hue={hue} />}
+      {/* 看板 */}
       {signTex && (
         <mesh position={[0, h / 2 * 0.35, d / 2 + 0.05]}>
           <planeGeometry args={[signW, signH]} />
-          <meshStandardMaterial
-            map={signTex}
-            emissive="#ffffff"
-            emissiveMap={signTex}
-            emissiveIntensity={1.2}
-            toneMapped={false}
-            side={THREE.DoubleSide}
-          />
+          <meshStandardMaterial map={signTex} emissive="#ffffff" emissiveMap={signTex} emissiveIntensity={1.3} toneMapped={false} side={THREE.DoubleSide} />
         </mesh>
       )}
-      {/* コンサート会場は入口を強調 */}
+      {/* ラベル付きは右側面にも縦ネオンサイン */}
+      {label && (
+        <mesh position={[w / 2 + 0.03, h * 0.1, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[0.3, h * 0.5]} />
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2} toneMapped={false} />
+        </mesh>
+      )}
+      {/* コンサート会場 */}
       {type === "concert" && (
         <>
-          {/* アーチ入口 */}
           <mesh position={[0, -h / 2 + 2.5, d / 2 + 0.06]}>
             <planeGeometry args={[3.5, 5]} />
-            <meshStandardMaterial
-              color={accent}
-              emissive={accent}
-              emissiveIntensity={0.8}
-              transparent
-              opacity={0.3}
-              toneMapped={false}
-            />
+            <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.8} transparent opacity={0.3} toneMapped={false} />
           </mesh>
-          {/* 屋上のドーム */}
           <mesh position={[0, h / 2 + 1.2, 0]}>
             <sphereGeometry args={[3.5, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
-            <meshStandardMaterial
-              color={base}
-              emissive={accent}
-              emissiveIntensity={0.4}
-              toneMapped={false}
-            />
+            <meshStandardMaterial color={glass} emissive={accent} emissiveIntensity={0.5} toneMapped={false} />
           </mesh>
-          {/* スポットライト (天井から2本) */}
-          <pointLight
-            position={[-2, h / 2 + 3, 0]}
-            intensity={2}
-            color={accent}
-            distance={18}
-          />
-          <pointLight
-            position={[2, h / 2 + 3, 0]}
-            intensity={2}
-            color="#ffd166"
-            distance={18}
-          />
+          <pointLight position={[-2, h / 2 + 3, 0]} intensity={2} color={accent} distance={18} />
+          <pointLight position={[2, h / 2 + 3, 0]} intensity={2} color="#ffd166" distance={18} />
         </>
       )}
-      {/* カフェは1F入口にウォームライト */}
+      {/* カフェ */}
       {type === "cafe" && (
-        <pointLight
-          position={[0, -h / 2 + 1.5, d / 2 + 1]}
-          intensity={1.2}
-          color="#ffd166"
-          distance={8}
-        />
+        <pointLight position={[0, -h / 2 + 1.5, d / 2 + 1]} intensity={1.2} color="#ffd166" distance={8} />
       )}
-      {/* 高層ビルにはアンテナ + 赤ランプ */}
-      {h > 12 && (
+      {/* 高層アンテナ */}
+      {h > 14 && (
         <>
           <mesh position={[0, h / 2 + 1.5, 0]}>
             <cylinderGeometry args={[0.05, 0.05, 3, 6]} />
-            <meshStandardMaterial color="#333" />
+            <meshStandardMaterial color="#444" />
           </mesh>
           <mesh position={[0, h / 2 + 3.2, 0]}>
             <sphereGeometry args={[0.1, 8, 8]} />
-            <meshStandardMaterial
-              color="#ff3d8b"
-              emissive="#ff3d8b"
-              emissiveIntensity={3}
-              toneMapped={false}
-            />
+            <meshStandardMaterial color="#ff3d8b" emissive="#ff3d8b" emissiveIntensity={3} toneMapped={false} />
           </mesh>
         </>
-      )}
-      {/* ラベル付きビルは右側面に縦ネオンストリップ */}
-      {label && (
-        <mesh position={[w / 2 + 0.03, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
-          <planeGeometry args={[0.25, h * 0.6]} />
-          <meshStandardMaterial
-            color={accent}
-            emissive={accent}
-            emissiveIntensity={1.8}
-            toneMapped={false}
-          />
-        </mesh>
       )}
     </group>
   );
@@ -873,37 +804,90 @@ function AreaSign({
   ) : null;
 }
 
-// ===== 夕焼け→夜空 =====
-function SunsetSky() {
-  const tex = useMemo(() => {
-    if (typeof document === "undefined") return null;
+// ===== 昼夜サイクル (1日=15分=900秒) =====
+// 0-300s: 朝, 300-600s: 昼, 600-900s: 夜
+function lerpHex(a: string, b: string, t: number): string {
+  const ca = new THREE.Color(a);
+  ca.lerp(new THREE.Color(b), t);
+  return "#" + ca.getHexString();
+}
+
+type CyclePhase = "morning" | "day" | "night";
+function getCycleState(): { phase: CyclePhase; t: number; seconds: number } {
+  const s = (Date.now() / 1000) % 900;
+  if (s < 300) return { phase: "morning", t: s / 300, seconds: s };
+  if (s < 600) return { phase: "day", t: (s - 300) / 300, seconds: s };
+  return { phase: "night", t: (s - 600) / 300, seconds: s };
+}
+
+function skyColors(s: number): [string, string, string] {
+  if (s < 100) {
+    const t = s / 100;
+    return [lerpHex("#0a0625", "#2a1850", t), lerpHex("#120830", "#4a2060", t), lerpHex("#1a1040", "#ff7744", t)];
+  }
+  if (s < 300) {
+    const t = (s - 100) / 200;
+    return [lerpHex("#2a1850", "#5599dd", t), lerpHex("#4a2060", "#88ccee", t), lerpHex("#ff7744", "#ffeecc", t)];
+  }
+  if (s < 600) {
+    return ["#4499dd", "#88ccee", "#ddeeff"];
+  }
+  if (s < 700) {
+    const t = (s - 600) / 100;
+    return [lerpHex("#4499dd", "#3a1858", t), lerpHex("#88ccee", "#6a2860", t), lerpHex("#ddeeff", "#ff6633", t)];
+  }
+  if (s < 800) {
+    const t = (s - 700) / 100;
+    return [lerpHex("#3a1858", "#0e0628", t), lerpHex("#6a2860", "#1a0a38", t), lerpHex("#ff6633", "#2a1050", t)];
+  }
+  const t = (s - 800) / 100;
+  return [lerpHex("#0e0628", "#0a0625", t), lerpHex("#1a0a38", "#120830", t), lerpHex("#2a1050", "#1a1040", t)];
+}
+
+function DynamicSky() {
+  const matRef = useRef<THREE.MeshBasicMaterial>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const texRef = useRef<THREE.CanvasTexture | null>(null);
+  const lastRef = useRef(0);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
     const c = document.createElement("canvas");
     c.width = 1;
-    c.height = 512;
-    const ctx = c.getContext("2d");
-    if (!ctx) return null;
-    const g = ctx.createLinearGradient(0, 0, 0, 512);
-    g.addColorStop(0, "#060318");
-    g.addColorStop(0.25, "#0e0630");
-    g.addColorStop(0.45, "#2a1058");
-    g.addColorStop(0.6, "#6b2060");
-    g.addColorStop(0.75, "#c04848");
-    g.addColorStop(0.88, "#e87040");
-    g.addColorStop(0.96, "#ffaa44");
-    g.addColorStop(1.0, "#ffcc66");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 1, 512);
+    c.height = 256;
+    canvasRef.current = c;
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
-    return t;
+    texRef.current = t;
+    if (matRef.current) matRef.current.map = t;
   }, []);
 
-  return tex ? (
+  useFrame(() => {
+    const now = Date.now() / 1000;
+    if (now - lastRef.current < 0.5) return;
+    lastRef.current = now;
+    const c = canvasRef.current;
+    const t = texRef.current;
+    if (!c || !t) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    const [top, mid, horizon] = skyColors(now % 900);
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, top);
+    g.addColorStop(0.5, mid);
+    g.addColorStop(1.0, horizon);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 1, 256);
+    t.needsUpdate = true;
+    if (matRef.current && !matRef.current.map) matRef.current.map = t;
+  });
+
+  return (
     <mesh>
       <sphereGeometry args={[190, 32, 32]} />
-      <meshBasicMaterial map={tex} side={THREE.BackSide} />
+      <meshBasicMaterial ref={matRef} side={THREE.BackSide} />
     </mesh>
-  ) : null;
+  );
 }
 
 // ===== ホログラム =====
@@ -1164,6 +1148,115 @@ function NPCPedestrians() {
   );
 }
 
+// ===== 水辺 (リゾート要素) =====
+function WaterBody() {
+  const ref = useRef<THREE.Mesh>(null);
+  const waterCol = useMemo(() => new THREE.Color("#1188cc"), []);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    (ref.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
+      0.3 + Math.sin(state.clock.elapsedTime * 0.8) * 0.15;
+  });
+
+  return (
+    <group>
+      <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.3, 55]}>
+        <planeGeometry args={[200, 60]} />
+        <meshStandardMaterial
+          color={waterCol}
+          emissive={waterCol}
+          emissiveIntensity={0.35}
+          transparent
+          opacity={0.75}
+          metalness={0.6}
+          roughness={0.2}
+        />
+      </mesh>
+      {/* 岸壁 */}
+      <mesh position={[0, -0.15, 25]}>
+        <boxGeometry args={[200, 0.6, 0.5]} />
+        <meshStandardMaterial color="#2a1a3a" />
+      </mesh>
+    </group>
+  );
+}
+
+// ===== モノレール =====
+function MonorailTrack() {
+  const RX = 38;
+  const RZ = 32;
+  const H = 13;
+  const pillars = useMemo(() => {
+    const out: { x: number; z: number }[] = [];
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      out.push({ x: Math.cos(a) * RX, z: Math.sin(a) * RZ });
+    }
+    return out;
+  }, []);
+
+  return (
+    <group>
+      {/* レール (楕円トーラス) */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, H, 0]} scale={[RX, RZ, 1]}>
+        <torusGeometry args={[1, 0.12, 6, 64]} />
+        <meshStandardMaterial color="#aaa" metalness={0.9} roughness={0.1} />
+      </mesh>
+      {/* 支柱 */}
+      {pillars.filter((_, i) => i % 3 === 0).map((p, i) => (
+        <mesh key={i} position={[p.x, H / 2, p.z]}>
+          <cylinderGeometry args={[0.12, 0.18, H, 6]} />
+          <meshStandardMaterial color="#666" metalness={0.8} roughness={0.2} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function MonorailTrain() {
+  const ref = useRef<THREE.Group>(null);
+  const RX = 38;
+  const RZ = 32;
+  const H = 13;
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const a = state.clock.elapsedTime * 0.08;
+    ref.current.position.set(Math.cos(a) * RX, H + 0.6, Math.sin(a) * RZ);
+    ref.current.rotation.y = -a + Math.PI / 2;
+  });
+
+  return (
+    <group ref={ref}>
+      <mesh>
+        <boxGeometry args={[1.4, 1.1, 5.5]} />
+        <meshStandardMaterial color="#ffd166" metalness={0.7} roughness={0.2} />
+      </mesh>
+      {/* 窓 (両サイド) */}
+      <mesh position={[0.71, 0.05, 0]}>
+        <boxGeometry args={[0.02, 0.45, 4.2]} />
+        <meshStandardMaterial color="#88ccff" emissive="#88ccff" emissiveIntensity={0.9} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.71, 0.05, 0]}>
+        <boxGeometry args={[0.02, 0.45, 4.2]} />
+        <meshStandardMaterial color="#88ccff" emissive="#88ccff" emissiveIntensity={0.9} toneMapped={false} />
+      </mesh>
+      {/* ヘッドライト */}
+      <mesh position={[0, 0, 2.8]}>
+        <sphereGeometry args={[0.12, 8, 8]} />
+        <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={3} toneMapped={false} />
+      </mesh>
+      <pointLight position={[0, 0, 3.5]} intensity={2} color="#ffffcc" distance={20} />
+      {/* 車体ネオンライン */}
+      <mesh position={[0, -0.56, 0]}>
+        <boxGeometry args={[1.5, 0.05, 5.6]} />
+        <meshStandardMaterial color="#ff3d8b" emissive="#ff3d8b" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
 // ===== ヤシの木 =====
 function Palm({ x, z, scale = 1 }: { x: number; z: number; scale?: number }) {
   const leaves = [0, 1, 2, 3, 4, 5];
@@ -1202,91 +1295,140 @@ export interface BuildingBox {
   d: number;
   h: number;
   hue: number;
-  label?: string; // 看板テキスト (CanvasTexture で前面に焼き込む)
+  label?: string;
   type?: "normal" | "concert" | "cafe" | "shop" | "agency" | "residence" | "station";
+  skyline?: boolean;
+}
+
+function overlapsAny(x: number, z: number, w: number, d: number, list: BuildingBox[]): boolean {
+  for (const b of list) {
+    if (Math.abs(x - b.x) < (w + b.w) / 2 + 0.6 && Math.abs(z - b.z) < (d + b.d) / 2 + 0.6) return true;
+  }
+  // 中央広場 (半径 8) と水辺 (z>24) も避ける
+  if (Math.hypot(x, z) < 10) return true;
+  return false;
 }
 
 /**
- * MarinLuna Seoul エリアマップ構造。
- *
- *   NW: 事務所エリア          NE: エンタメ通り
- *           道路 (x=0, 南北)
- *   SW: 住宅 & 写真館         SE: ショッピング & 練習生通り
- *
- * 中央に広場 (噴水 + ステージ)。
- * 周辺は遠景スカイラインとして大型ビル群を配置。
+ * 超密集ネオン都市レイアウト。
+ * 建物を隙間なく詰めて、ズートピア/シュガーラッシュ風の密度感を出す。
  */
 export function makeBuildings(): BuildingBox[] {
   const out: BuildingBox[] = [];
-
-  // ===== NE: エンタメ通り (Entertainment District) =====
-  out.push(
-    // コンサート会場 (最大の建物)
-    { x: 20, z: -24, w: 14, d: 12, h: 13, hue: 280, label: "🎤 CONCERT HALL", type: "concert" },
-    // ライブハウス
-    { x: 30, z: -12, w: 6, d: 5, h: 9, hue: 330, label: "🎵 LIVE HOUSE" },
-    // 放送局
-    { x: 32, z: -24, w: 5, d: 5, h: 18, hue: 260, label: "📺 MBC STUDIO" },
-    // レコーディングスタジオ
-    { x: 28, z: -5, w: 5, d: 4, h: 8, hue: 290, label: "🎧 REC STUDIO" },
-  );
-
-  // ===== SE: ショッピング & 練習生通り =====
-  out.push(
-    // カフェ
-    { x: 15, z: 5, w: 6, d: 5, h: 7, hue: 340, label: "☕ CLOUD NINE", type: "cafe" },
-    // アイドルショップ
-    { x: 24, z: 3, w: 5, d: 5, h: 9, hue: 40, label: "🛍️ IDOL SHOP", type: "shop" },
-    // レストラン
-    { x: 18, z: 14, w: 7, d: 5, h: 6, hue: 15, label: "🍜 HOT POT 24" },
-    // テックストア
-    { x: 28, z: 10, w: 5, d: 4, h: 12, hue: 200, label: "📱 NEOFOLD" },
-    // ドリンクバー
-    { x: 22, z: 20, w: 5, d: 4, h: 6, hue: 180, label: "🧋 PICO SODA" },
-    // オーディション会場
-    { x: 18, z: 28, w: 8, d: 6, h: 9, hue: 270, label: "🎭 AUDITION HALL" },
-    // 練習場
-    { x: 30, z: 26, w: 6, d: 5, h: 10, hue: 250, label: "💪 TRAINING CTR" },
-  );
-
-  // ===== NW: 事務所エリア (Agency District) =====
-  out.push(
-    // エージェンシータワー
-    { x: -20, z: -25, w: 7, d: 6, h: 22, hue: 270, label: "🏢 AGENCY TOWER", type: "agency" },
-    // ファッションブランド本社
-    { x: -28, z: -18, w: 6, d: 5, h: 14, hue: 45, label: "👗 ATELIER SEOUL", type: "agency" },
-    // マネジメント事務所
-    { x: -20, z: -15, w: 5, d: 5, h: 12, hue: 230, label: "📊 MANAGEMENT" },
-    // MarinLuna 本部 (ゲーム運営)
-    { x: -28, z: -28, w: 8, d: 6, h: 16, hue: 310, label: "✨ MarinLuna HQ" },
-  );
-
-  // ===== SW: 住宅 & レジャー =====
-  // (Photo Hall は PHOTO_HALL 定数で別管理: x=-14, z=-12)
-  out.push(
-    { x: -20, z: 6, w: 6, d: 5, h: 7, hue: 320, label: "🏠 RESIDENCE", type: "residence" },
-    { x: -28, z: 10, w: 5, d: 5, h: 6, hue: 300, label: "🏠 APARTMENT", type: "residence" },
-    { x: -22, z: 18, w: 6, d: 5, h: 5, hue: 30, label: "🐱 CAT CAFÉ", type: "cafe" },
-    { x: -16, z: 26, w: 5, d: 4, h: 7, hue: 350, label: "💈 BEAUTY SALON" },
-    { x: -26, z: 24, w: 5, d: 5, h: 8, hue: 210, label: "🏋️ FITNESS GYM" },
-  );
-
-  // ===== 遠景スカイライン (各方角に大型ビルを配置) =====
   const rng = mulberry32(42);
-  for (let i = 0; i < 50; i++) {
+  const hues = [260, 280, 300, 320, 340, 200, 220, 180, 40, 30, 160, 50];
+  const pickHue = () => hues[Math.floor(rng() * hues.length)] + (rng() - 0.5) * 30;
+
+  // ===== NE: エンタメ通り =====
+  out.push(
+    { x: 20, z: -24, w: 14, d: 12, h: 15, hue: 280, label: "🎤 콘서트홀", type: "concert" },
+    { x: 32, z: -14, w: 7, d: 6, h: 11, hue: 330, label: "🎵 라이브" },
+    { x: 35, z: -24, w: 6, d: 6, h: 22, hue: 260, label: "📺 MBC" },
+    { x: 28, z: -4, w: 6, d: 5, h: 10, hue: 290, label: "🎧 녹음실" },
+    { x: 22, z: -12, w: 5, d: 5, h: 12, hue: 310, label: "🎤 노래방" },
+  );
+  // ===== SE: ショッピング =====
+  out.push(
+    { x: 14, z: 5, w: 7, d: 6, h: 8, hue: 340, label: "☕ 카페", type: "cafe" },
+    { x: 24, z: 3, w: 6, d: 6, h: 11, hue: 40, label: "🛍️ 아이돌샵", type: "shop" },
+    { x: 17, z: 14, w: 8, d: 6, h: 7, hue: 15, label: "🍜 맛집" },
+    { x: 28, z: 10, w: 6, d: 5, h: 14, hue: 200, label: "📱 네오폴드" },
+    { x: 22, z: 20, w: 6, d: 5, h: 7, hue: 180, label: "🧋 피코소다" },
+    { x: 14, z: 20, w: 5, d: 5, h: 9, hue: 50, label: "🎮 게임센터" },
+  );
+  // ===== NW: 事務所エリア =====
+  out.push(
+    { x: -20, z: -25, w: 8, d: 7, h: 26, hue: 270, label: "🏢 에이전시", type: "agency" },
+    { x: -30, z: -18, w: 7, d: 6, h: 16, hue: 45, label: "👗 아틀리에", type: "agency" },
+    { x: -20, z: -15, w: 6, d: 6, h: 14, hue: 230, label: "📊 매니지먼트" },
+    { x: -30, z: -28, w: 9, d: 7, h: 20, hue: 310, label: "✨ MarinLuna" },
+    { x: -20, z: -35, w: 6, d: 5, h: 18, hue: 250, label: "📡 미디어" },
+  );
+  // ===== SW: 住宅 =====
+  out.push(
+    { x: -20, z: 6, w: 7, d: 6, h: 8, hue: 320, label: "🏠 레지던스", type: "residence" },
+    { x: -28, z: 10, w: 6, d: 6, h: 7, hue: 300, label: "🏠 아파트", type: "residence" },
+    { x: -22, z: 18, w: 7, d: 6, h: 6, hue: 30, label: "🐱 고양이카페", type: "cafe" },
+    { x: -14, z: 18, w: 5, d: 5, h: 8, hue: 350, label: "💈 뷰티살롱" },
+    { x: -26, z: 22, w: 6, d: 6, h: 9, hue: 210, label: "🏋️ 피트니스" },
+  );
+
+  // ===== 道路沿い密集ビル (東側1列目) =====
+  for (let z = -38; z <= 22; z += 3.5 + rng() * 2) {
+    const bw = 3 + rng() * 2.5;
+    const bd = 3 + rng() * 2;
+    const bh = 5 + rng() * 16;
+    const bx = 6.5 + bw / 2;
+    if (!overlapsAny(bx, z, bw, bd, out)) {
+      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
+    }
+  }
+  // 東側2列目
+  for (let z = -36; z <= 22; z += 4 + rng() * 2) {
+    const bw = 3.5 + rng() * 3;
+    const bd = 3 + rng() * 2.5;
+    const bh = 7 + rng() * 18;
+    const bx = 13 + rng() * 3;
+    if (!overlapsAny(bx, z, bw, bd, out)) {
+      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
+    }
+  }
+  // 東側3列目
+  for (let z = -34; z <= 22; z += 5 + rng() * 3) {
+    const bw = 4 + rng() * 4;
+    const bd = 4 + rng() * 3;
+    const bh = 10 + rng() * 22;
+    const bx = 22 + rng() * 5;
+    if (!overlapsAny(bx, z, bw, bd, out)) {
+      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
+    }
+  }
+  // 西側1列目
+  for (let z = -38; z <= 22; z += 3.5 + rng() * 2) {
+    const bw = 3 + rng() * 2.5;
+    const bd = 3 + rng() * 2;
+    const bh = 5 + rng() * 16;
+    const bx = -(6.5 + bw / 2);
+    if (!overlapsAny(bx, z, bw, bd, out)) {
+      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
+    }
+  }
+  // 西側2列目
+  for (let z = -36; z <= 22; z += 4 + rng() * 2) {
+    const bw = 3.5 + rng() * 3;
+    const bd = 3 + rng() * 2.5;
+    const bh = 7 + rng() * 18;
+    const bx = -(13 + rng() * 3);
+    if (!overlapsAny(bx, z, bw, bd, out)) {
+      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
+    }
+  }
+  // 西側3列目
+  for (let z = -34; z <= 22; z += 5 + rng() * 3) {
+    const bw = 4 + rng() * 4;
+    const bd = 4 + rng() * 3;
+    const bh = 10 + rng() * 22;
+    const bx = -(22 + rng() * 5);
+    if (!overlapsAny(bx, z, bw, bd, out)) {
+      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
+    }
+  }
+
+  // ===== 超密集スカイライン (背景) =====
+  for (let i = 0; i < 120; i++) {
     const angle = rng() * Math.PI * 2;
-    const dist = 38 + rng() * 30;
+    const dist = 36 + rng() * 35;
     const bx = Math.cos(angle) * dist;
     const bz = Math.sin(angle) * dist;
-    // 道路帯を避ける
-    if (Math.abs(bx) < 6) continue;
+    if (Math.abs(bx) < 8) continue;
+    if (bz > 26) continue; // 水辺方面は避ける
     out.push({
-      x: bx,
-      z: bz,
-      w: 4 + rng() * 6,
-      d: 4 + rng() * 6,
-      h: 10 + rng() * 30,
-      hue: 230 + (rng() - 0.5) * 120,
+      x: bx, z: bz,
+      w: 4 + rng() * 8,
+      d: 4 + rng() * 8,
+      h: 12 + rng() * 45,
+      hue: pickHue(),
+      skyline: true,
     });
   }
 
@@ -1312,10 +1454,21 @@ function City() {
   const buildings = useMemo(() => makeBuildings(), []);
 
   const palms = useMemo(() => {
+    const rng = mulberry32(555);
     const out: { x: number; z: number; s: number }[] = [];
+    // 道路沿いヤシ並木
+    for (let i = -8; i <= 5; i++) {
+      out.push({ x: -5.2, z: i * 5 + 2, s: 0.8 + rng() * 0.15 });
+      out.push({ x: 5.2, z: i * 5 - 2, s: 0.8 + rng() * 0.15 });
+    }
+    // 水辺沿いの熱帯ヤシ
     for (let i = -8; i <= 8; i++) {
-      out.push({ x: -5.5, z: i * 6 + 2, s: 0.85 + ((i * 17) % 5) * 0.05 });
-      out.push({ x: 5.5, z: i * 6 - 2, s: 0.85 + ((i * 23) % 5) * 0.05 });
+      out.push({ x: i * 8, z: 23 + rng() * 3, s: 0.9 + rng() * 0.3 });
+    }
+    // 広場周辺
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      out.push({ x: Math.cos(a) * 9, z: Math.sin(a) * 9, s: 0.7 + rng() * 0.2 });
     }
     return out;
   }, []);
@@ -1323,121 +1476,91 @@ function City() {
   return (
     <group>
       {/* 地面 */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        receiveShadow
-        position={[0, 0, 0]}
-      >
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, 0]}>
         <planeGeometry args={[400, 400]} />
         <meshStandardMaterial color="#120a22" />
       </mesh>
-      {/* 道路 */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.01, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[7, 400]} />
-        <meshStandardMaterial
-          color="#0a0612"
-          emissive="#1a0530"
-          emissiveIntensity={0.35}
-        />
+      {/* メインストリート */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
+        <planeGeometry args={[8, 400]} />
+        <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
       </mesh>
-      {/* レーン (黄色いダッシュ) */}
-      {Array.from({ length: 40 }).map((_, i) => (
-        <mesh
-          key={i}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0.02, -195 + i * 10]}
-        >
+      {/* 歩道 (両サイド) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[4.8, 0.02, 0]}>
+        <planeGeometry args={[1.6, 400]} />
+        <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-4.8, 0.02, 0]}>
+        <planeGeometry args={[1.6, 400]} />
+        <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
+      </mesh>
+      {/* レーンダッシュ */}
+      {Array.from({ length: 50 }).map((_, i) => (
+        <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, -245 + i * 10]}>
           <planeGeometry args={[0.22, 2.4]} />
-          <meshStandardMaterial
-            color="#ffd166"
-            emissive="#ffd166"
-            emissiveIntensity={1.4}
-            toneMapped={false}
-          />
+          <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
         </mesh>
       ))}
-      {/* === 中央広場 (Central Plaza) === */}
+
+      {/* 中央広場 */}
       <CentralPlaza />
+      {/* エリア標識 */}
+      <AreaSign x={22}  z={-18} text="🎤 엔터테인먼트" rotY={0} />
+      <AreaSign x={22}  z={10}  text="🛍️ 쇼핑거리" rotY={0} />
+      <AreaSign x={-22} z={-20} text="🏢 에이전시" rotY={0} />
+      <AreaSign x={-22} z={12}  text="🏠 주거지역" rotY={0} />
 
-      {/* === エリア名の地面標識 === */}
-      <AreaSign x={22}  z={-18} text="🎤 ENTERTAINMENT" rotY={0} />
-      <AreaSign x={22}  z={10}  text="🛍️ SHOPPING" rotY={0} />
-      <AreaSign x={-22} z={-20} text="🏢 AGENCY" rotY={0} />
-      <AreaSign x={-22} z={12}  text="🏠 RESIDENTIAL" rotY={0} />
-
-      {/* === ビル群 (エリア構造 + 遠景スカイライン) === */}
+      {/* 密集ビル群 */}
       {buildings.map((b, i) => (
         <Building key={i} {...b} />
       ))}
-      {/* 写真館 (MarinLuna Photo Hall) */}
+      {/* 写真館 */}
       <PhotoHall />
-      {/* ヤシ並木 */}
+
+      {/* 水辺 (リゾート) */}
+      <WaterBody />
+      {/* モノレール */}
+      <MonorailTrack />
+      <MonorailTrain />
+
+      {/* ヤシの木 (密集) */}
       {palms.map((p, i) => (
         <Palm key={i} x={p.x} z={p.z} scale={p.s} />
       ))}
-      {/* 巨大ホログラム看板 (運営の世界観コピー) */}
-      <Billboard
-        x={0}
-        y={22}
-        z={-32}
-        text="MarinLuna"
-        subText="Rise to Fame"
-        colorA="#ff3d8b"
-        colorB="#7b2cff"
-        width={24}
-        height={6}
-      />
-      <HologramFigure x={0} y={28} z={-32} />
-      <Billboard
-        x={0}
-        y={20}
-        z={32}
-        text="📍 Seoul"
-        subText="K-POP × LA STREET"
-        colorA="#00e6ff"
-        colorB="#7b2cff"
-        rotationY={Math.PI}
-        width={20}
-        height={5}
-      />
-      <HologramFigure x={0} y={26} z={32} />
-      {/* 側面の巨大看板 */}
-      <Billboard
-        x={-38}
-        y={18}
-        z={-10}
-        text="✨ DREAM STAGE"
-        subText="YOUR IDOL AWAITS"
-        colorA="#ffd166"
-        colorB="#ff3d8b"
-        rotationY={Math.PI / 2}
-        width={16}
-        height={4.5}
-      />
-      <Billboard
-        x={38}
-        y={16}
-        z={8}
-        text="🎤 DEBUT NOW"
-        subText="THE WORLD IS WATCHING"
-        colorA="#7b2cff"
-        colorB="#00e6ff"
-        rotationY={-Math.PI / 2}
-        width={16}
-        height={4.5}
-      />
 
-      {/* 街の広告枠 (admin/user/empty を slotKind バッジ付きで表示) */}
+      {/* 巨大ホログラム看板 */}
+      <Billboard x={0} y={24} z={-34} text="MarinLuna" subText="Rise to Fame" colorA="#ff3d8b" colorB="#7b2cff" width={26} height={7} />
+      <HologramFigure x={0} y={32} z={-34} />
+      <Billboard x={0} y={20} z={24} text="📍 서울" subText="NEON PARADISE" colorA="#00e6ff" colorB="#7b2cff" rotationY={Math.PI} width={22} height={5.5} />
+      <HologramFigure x={0} y={27} z={24} />
+      {/* 側面巨大看板 */}
+      <Billboard x={-40} y={20} z={-10} text="✨ DREAM STAGE" subText="꿈의 무대" colorA="#ffd166" colorB="#ff3d8b" rotationY={Math.PI / 2} width={18} height={5} />
+      <Billboard x={40} y={18} z={5} text="🎤 데뷔" subText="THE WORLD IS WATCHING" colorA="#7b2cff" colorB="#00e6ff" rotationY={-Math.PI / 2} width={18} height={5} />
+      <Billboard x={-35} y={15} z={15} text="🌴 파라다이스" subText="TROPICAL CITY" colorA="#44ddaa" colorB="#00bbff" rotationY={Math.PI / 3} width={14} height={4} />
+      <Billboard x={35} y={16} z={-20} text="🎵 K-POP" subText="LIVE TONIGHT" colorA="#ff66aa" colorB="#ffaa44" rotationY={-Math.PI / 3} width={14} height={4} />
+
+      {/* 広告枠 (建物側面) */}
       <CityAdBoards />
 
-      {/* NPC 車 & 歩行者 & 空飛ぶ乗り物 */}
+      {/* 街の生命: 車・歩行者・空飛ぶ乗り物 */}
       <NPCCars />
       <NPCPedestrians />
       <FlyingVehicles />
+
+      {/* 街灯 (道路沿い) */}
+      {Array.from({ length: 16 }).map((_, i) => {
+        const z = -35 + i * 4.5;
+        const side = i % 2 === 0 ? 4 : -4;
+        return (
+          <group key={`lamp${i}`}>
+            <mesh position={[side, 2, z]}>
+              <cylinderGeometry args={[0.04, 0.06, 4, 6]} />
+              <meshStandardMaterial color="#444" />
+            </mesh>
+            <pointLight position={[side, 4.2, z]} intensity={0.6} color="#ffddaa" distance={8} />
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -1755,7 +1878,68 @@ function Player({
   );
 }
 
-// ===== ライティング & シーン全体 =====
+// ===== 動的ライティング (昼夜サイクル対応) =====
+function DynamicLighting() {
+  const ambRef = useRef<THREE.AmbientLight>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const dirRef = useRef<THREE.DirectionalLight>(null);
+  const neon1Ref = useRef<THREE.PointLight>(null);
+  const neon2Ref = useRef<THREE.PointLight>(null);
+  const neon3Ref = useRef<THREE.PointLight>(null);
+  const { scene } = useThree();
+
+  useFrame(() => {
+    const { phase, t } = getCycleState();
+    let ambI: number, dirI: number, neonI: number;
+    let ambCol: string, dirCol: string;
+
+    if (phase === "morning") {
+      ambI = 0.2 + t * 0.4;
+      dirI = 0.3 + t * 0.8;
+      neonI = 1.2 * (1 - t * 0.8);
+      ambCol = lerpHex("#6050a0", "#8899bb", t);
+      dirCol = lerpHex("#ff8844", "#ffeedd", t);
+      const fogCol = new THREE.Color(lerpHex("#1a0a2e", "#aabbcc", t * 0.5));
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.009 - t * 0.003);
+    } else if (phase === "day") {
+      ambI = 0.6;
+      dirI = 1.1;
+      neonI = 0.15;
+      ambCol = "#8899bb";
+      dirCol = "#ffeedd";
+      scene.fog = new THREE.FogExp2(0x8899bb, 0.006);
+    } else {
+      ambI = 0.6 - t * 0.45;
+      dirI = 1.1 - t * 0.9;
+      neonI = 0.15 + t * 1.6;
+      ambCol = lerpHex("#8899bb", "#2a1848", t);
+      dirCol = lerpHex("#ffeedd", "#443366", t);
+      const fogCol = new THREE.Color(lerpHex("#8899bb", "#0e0620", t));
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.006 + t * 0.005);
+    }
+
+    if (ambRef.current) { ambRef.current.intensity = ambI; ambRef.current.color.set(ambCol); }
+    if (dirRef.current) { dirRef.current.intensity = dirI; dirRef.current.color.set(dirCol); }
+    if (hemiRef.current) { hemiRef.current.intensity = phase === "day" ? 0.5 : 0.35; }
+    if (neon1Ref.current) neon1Ref.current.intensity = neonI;
+    if (neon2Ref.current) neon2Ref.current.intensity = neonI * 0.8;
+    if (neon3Ref.current) neon3Ref.current.intensity = neonI * 0.8;
+  });
+
+  return (
+    <>
+      <ambientLight ref={ambRef} intensity={0.4} color="#7070a0" />
+      <hemisphereLight ref={hemiRef} args={["#ff9966", "#1a0a30", 0.4]} />
+      <directionalLight ref={dirRef} position={[40, 20, -15]} intensity={0.8} color="#ffaa66" castShadow />
+      <directionalLight position={[-10, 50, 0]} intensity={0.2} color="#cc88ff" />
+      <pointLight ref={neon1Ref} position={[0, 8, 0]} intensity={1.2} color="#ff3d8b" distance={50} />
+      <pointLight ref={neon2Ref} position={[12, 6, -10]} intensity={1} color="#7b2cff" distance={40} />
+      <pointLight ref={neon3Ref} position={[-12, 6, 10]} intensity={1} color="#00e6ff" distance={40} />
+    </>
+  );
+}
+
+// ===== シーン全体 =====
 function SceneInner({
   avatar,
   input,
@@ -1773,29 +1957,8 @@ function SceneInner({
 
   return (
     <>
-      <SunsetSky />
-      {/* 夕暮れの太陽光 (低い角度・暖色) */}
-      <ambientLight intensity={0.35} color="#9070a0" />
-      <hemisphereLight args={["#ff9966", "#1a0a30", 0.55]} />
-      <directionalLight
-        position={[40, 12, -20]}
-        intensity={1.1}
-        color="#ffaa66"
-        castShadow
-      />
-      {/* 空の残照 (上方向の柔らかい紫) */}
-      <directionalLight
-        position={[-10, 50, 0]}
-        intensity={0.3}
-        color="#cc88ff"
-      />
-      {/* ネオン感を出す追加ポイントライト (中央) */}
-      <pointLight position={[0, 8, 0]} intensity={1.8} color="#ff3d8b" distance={45} />
-      <pointLight position={[10, 6, -8]} intensity={1.4} color="#7b2cff" distance={35} />
-      <pointLight position={[-10, 6, 10]} intensity={1.4} color="#00e6ff" distance={35} />
-      {/* 地平線の夕焼けグロー */}
-      <pointLight position={[60, 3, -30]} intensity={2} color="#ff6633" distance={80} />
-      <pointLight position={[-60, 3, 30]} intensity={1.5} color="#ff8844" distance={60} />
+      <DynamicSky />
+      <DynamicLighting />
       <City />
       <Player avatar={avatar} input={input} onEnterGallery={onEnterGallery} />
     </>
