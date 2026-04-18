@@ -884,7 +884,7 @@ function DynamicSky() {
 
   return (
     <mesh>
-      <sphereGeometry args={[190, 32, 32]} />
+      <sphereGeometry args={[600, 32, 32]} />
       <meshBasicMaterial ref={matRef} side={THREE.BackSide} />
     </mesh>
   );
@@ -1015,53 +1015,110 @@ function FlyingVehicles() {
   );
 }
 
-// ===== NPC 車 =====
+// ===== 道路ネットワーク定数 =====
+const ROAD_XS = [-80, -40, 0, 40, 80];
+const ROAD_ZS = [-80, -40, 0, 40, 80];
+
+function roadWidth(pos: number): number {
+  return pos === 0 ? 12 : 6;
+}
+
+function isOnRoad(x: number, z: number): boolean {
+  for (const rx of ROAD_XS) {
+    if (Math.abs(x - rx) < roadWidth(rx) / 2 + 2) return true;
+  }
+  for (const rz of ROAD_ZS) {
+    if (Math.abs(z - rz) < roadWidth(rz) / 2 + 2) return true;
+  }
+  return false;
+}
+
+function generateCarRoutes(count: number, rng: () => number): number[][][] {
+  const routes: number[][][] = [];
+  for (let r = 0; r < count; r++) {
+    let cx = ROAD_XS[Math.floor(rng() * ROAD_XS.length)];
+    let cz = ROAD_ZS[Math.floor(rng() * ROAD_ZS.length)];
+    const route: number[][] = [[cx, cz]];
+    let prevX = cx, prevZ = cz;
+    for (let step = 0; step < 20; step++) {
+      const neighbors: number[][] = [];
+      const xi = ROAD_XS.indexOf(cx);
+      const zi = ROAD_ZS.indexOf(cz);
+      if (xi > 0) neighbors.push([ROAD_XS[xi - 1], cz]);
+      if (xi < 4) neighbors.push([ROAD_XS[xi + 1], cz]);
+      if (zi > 0) neighbors.push([cx, ROAD_ZS[zi - 1]]);
+      if (zi < 4) neighbors.push([cx, ROAD_ZS[zi + 1]]);
+      const noBack = neighbors.filter(n => !(n[0] === prevX && n[1] === prevZ));
+      const pool = noBack.length > 0 ? noBack : neighbors;
+      const next = pool[Math.floor(rng() * pool.length)];
+      route.push(next);
+      prevX = cx; prevZ = cz;
+      cx = next[0]; cz = next[1];
+    }
+    routes.push(route);
+  }
+  return routes;
+}
+
+// ===== NPC 車 (ルート追従 + 交差点でランダム方向) =====
 function NPCCar({
-  lane,
+  route,
   speed,
-  offset,
+  laneOffset,
   color,
 }: {
-  lane: number;
+  route: number[][];
   speed: number;
-  offset: number;
+  laneOffset: number;
   color: string;
 }) {
   const ref = useRef<THREE.Group>(null);
   const col = useMemo(() => new THREE.Color(color), [color]);
 
   useFrame((state) => {
-    if (!ref.current) return;
-    const raw = state.clock.elapsedTime * speed + offset;
-    const z = (((raw % 180) + 180) % 180) - 90;
-    ref.current.position.set(lane, 0.35, z);
-    ref.current.rotation.y = speed > 0 ? 0 : Math.PI;
+    if (!ref.current || route.length < 2) return;
+    const segTime = 40 / speed;
+    const totalTime = (route.length - 1) * segTime;
+    const loopT = ((state.clock.elapsedTime % totalTime) + totalTime) % totalTime;
+    const segIdx = Math.min(Math.floor(loopT / segTime), route.length - 2);
+    const segP = (loopT / segTime) - segIdx;
+    const from = route[segIdx];
+    const to = route[segIdx + 1];
+    const x = from[0] + (to[0] - from[0]) * segP;
+    const z = from[1] + (to[1] - from[1]) * segP;
+    const dxx = to[0] - from[0];
+    const dzz = to[1] - from[1];
+    const len = Math.hypot(dxx, dzz);
+    if (len > 0) {
+      ref.current.position.set(x + (-dzz / len) * laneOffset, 0.35, z + (dxx / len) * laneOffset);
+      ref.current.rotation.y = Math.atan2(dxx, dzz);
+    }
   });
 
   return (
     <group ref={ref}>
       <mesh position={[0, 0.2, 0]}>
-        <boxGeometry args={[1.0, 0.5, 2.2]} />
+        <boxGeometry args={[1.2, 0.55, 2.6]} />
         <meshStandardMaterial color={col} metalness={0.6} roughness={0.3} />
       </mesh>
-      <mesh position={[0, 0.55, -0.1]}>
-        <boxGeometry args={[0.85, 0.35, 1.2]} />
+      <mesh position={[0, 0.6, -0.1]}>
+        <boxGeometry args={[1.0, 0.4, 1.4]} />
         <meshStandardMaterial color="#111" metalness={0.9} roughness={0.1} />
       </mesh>
-      <mesh position={[0.35, 0.2, 1.15]}>
-        <sphereGeometry args={[0.08, 8, 8]} />
+      <mesh position={[0.4, 0.2, 1.35]}>
+        <sphereGeometry args={[0.1, 8, 8]} />
         <meshStandardMaterial color="#ffffcc" emissive="#ffffcc" emissiveIntensity={3} toneMapped={false} />
       </mesh>
-      <mesh position={[-0.35, 0.2, 1.15]}>
-        <sphereGeometry args={[0.08, 8, 8]} />
+      <mesh position={[-0.4, 0.2, 1.35]}>
+        <sphereGeometry args={[0.1, 8, 8]} />
         <meshStandardMaterial color="#ffffcc" emissive="#ffffcc" emissiveIntensity={3} toneMapped={false} />
       </mesh>
-      <mesh position={[0.35, 0.2, -1.15]}>
-        <sphereGeometry args={[0.06, 8, 8]} />
+      <mesh position={[0.4, 0.2, -1.35]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
         <meshStandardMaterial color="#ff2222" emissive="#ff2222" emissiveIntensity={2} toneMapped={false} />
       </mesh>
-      <mesh position={[-0.35, 0.2, -1.15]}>
-        <sphereGeometry args={[0.06, 8, 8]} />
+      <mesh position={[-0.4, 0.2, -1.35]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
         <meshStandardMaterial color="#ff2222" emissive="#ff2222" emissiveIntensity={2} toneMapped={false} />
       </mesh>
     </group>
@@ -1069,49 +1126,78 @@ function NPCCar({
 }
 
 function NPCCars() {
-  const cars = useMemo(() => {
+  const data = useMemo(() => {
     const rng = mulberry32(999);
+    const routes = generateCarRoutes(12, rng);
     const colors = ["#ff3d8b", "#7b2cff", "#ffd166", "#00e6ff", "#ff6644", "#44ff88"];
-    return Array.from({ length: 6 }, (_, i) => ({
-      lane: i % 2 === 0 ? 1.8 : -1.8,
-      speed: (1.5 + rng() * 2) * (i % 2 === 0 ? 1 : -1),
-      offset: rng() * 200 - 100,
+    return routes.map((route, i) => ({
+      route,
+      speed: 6 + rng() * 5,
+      laneOffset: rng() > 0.5 ? 2.8 : -2.8,
       color: colors[i % colors.length],
     }));
   }, []);
   return (
     <>
-      {cars.map((c, i) => (
-        <NPCCar key={i} {...c} />
+      {data.map((d, i) => (
+        <NPCCar key={i} {...d} />
       ))}
     </>
   );
 }
 
-// ===== NPC 歩行者 =====
+// ===== NPC 歩行者 (ランダムウォーク AI) =====
 function NPCPedestrian({
-  lane,
-  speed,
-  offset,
-  skinHue,
-  outfitHue,
+  startX, startZ, skinHue, outfitHue, seed,
 }: {
-  lane: number;
-  speed: number;
-  offset: number;
-  skinHue: number;
-  outfitHue: number;
+  startX: number; startZ: number; skinHue: number; outfitHue: number; seed: number;
 }) {
   const ref = useRef<THREE.Group>(null);
   const skin = useMemo(() => new THREE.Color(`hsl(${skinHue}, 50%, 70%)`), [skinHue]);
   const outfit = useMemo(() => new THREE.Color(`hsl(${outfitHue}, 70%, 45%)`), [outfitHue]);
+  const stateRef = useRef({
+    x: startX, z: startZ,
+    targetX: startX + 10, targetZ: startZ + 10,
+    paused: false, pauseEnd: 0,
+    rng: mulberry32(seed),
+  });
 
-  useFrame((state) => {
+  useFrame((state, dt) => {
     if (!ref.current) return;
-    const raw = state.clock.elapsedTime * speed + offset;
-    const z = (((raw % 100) + 100) % 100) - 50;
-    ref.current.position.set(lane, 0, z);
-    ref.current.rotation.y = speed > 0 ? 0 : Math.PI;
+    const s = stateRef.current;
+    const now = state.clock.elapsedTime;
+
+    if (s.paused) {
+      if (now > s.pauseEnd) {
+        s.paused = false;
+        const angle = s.rng() * Math.PI * 2;
+        const dist = 10 + s.rng() * 40;
+        s.targetX = THREE.MathUtils.clamp(s.x + Math.cos(angle) * dist, -220, 220);
+        s.targetZ = THREE.MathUtils.clamp(s.z + Math.sin(angle) * dist, -220, 220);
+      }
+    } else {
+      const dx = s.targetX - s.x;
+      const dz = s.targetZ - s.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 1) {
+        if (s.rng() < 0.2) {
+          s.paused = true;
+          s.pauseEnd = now + 2 + s.rng() * 4;
+        } else {
+          const angle = s.rng() * Math.PI * 2;
+          const d = 10 + s.rng() * 40;
+          s.targetX = THREE.MathUtils.clamp(s.x + Math.cos(angle) * d, -220, 220);
+          s.targetZ = THREE.MathUtils.clamp(s.z + Math.sin(angle) * d, -220, 220);
+        }
+      } else {
+        const speed = 1.5;
+        const step = Math.min(speed * Math.min(dt, 0.05), dist);
+        s.x += (dx / dist) * step;
+        s.z += (dz / dist) * step;
+        ref.current.rotation.y = Math.atan2(dx, dz);
+      }
+    }
+    ref.current.position.set(s.x, 0, s.z);
   });
 
   return (
@@ -1131,12 +1217,12 @@ function NPCPedestrian({
 function NPCPedestrians() {
   const peds = useMemo(() => {
     const rng = mulberry32(7777);
-    return Array.from({ length: 10 }, () => ({
-      lane: (rng() > 0.5 ? 4.5 : -4.5) + (rng() - 0.5) * 1.5,
-      speed: (0.8 + rng() * 1.2) * (rng() > 0.5 ? 1 : -1),
-      offset: rng() * 120 - 60,
+    return Array.from({ length: 20 }, (_, i) => ({
+      startX: (rng() - 0.5) * 300,
+      startZ: (rng() - 0.5) * 300,
       skinHue: Math.floor(rng() * 40 + 15),
       outfitHue: Math.floor(rng() * 360),
+      seed: 8000 + i,
     }));
   }, []);
   return (
@@ -1161,8 +1247,8 @@ function WaterBody() {
 
   return (
     <group>
-      <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.3, 55]}>
-        <planeGeometry args={[200, 60]} />
+      <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.3, 200]}>
+        <planeGeometry args={[600, 120]} />
         <meshStandardMaterial
           color={waterCol}
           emissive={waterCol}
@@ -1174,8 +1260,8 @@ function WaterBody() {
         />
       </mesh>
       {/* 岸壁 */}
-      <mesh position={[0, -0.15, 25]}>
-        <boxGeometry args={[200, 0.6, 0.5]} />
+      <mesh position={[0, -0.15, 140]}>
+        <boxGeometry args={[600, 0.6, 0.5]} />
         <meshStandardMaterial color="#2a1a3a" />
       </mesh>
     </group>
@@ -1184,9 +1270,9 @@ function WaterBody() {
 
 // ===== モノレール =====
 function MonorailTrack() {
-  const RX = 38;
-  const RZ = 32;
-  const H = 13;
+  const RX = 160;
+  const RZ = 140;
+  const H = 16;
   const pillars = useMemo(() => {
     const out: { x: number; z: number }[] = [];
     for (let i = 0; i < 24; i++) {
@@ -1216,9 +1302,9 @@ function MonorailTrack() {
 
 function MonorailTrain() {
   const ref = useRef<THREE.Group>(null);
-  const RX = 38;
-  const RZ = 32;
-  const H = 13;
+  const RX = 160;
+  const RZ = 140;
+  const H = 16;
 
   useFrame((state) => {
     if (!ref.current) return;
@@ -1302,136 +1388,103 @@ export interface BuildingBox {
 
 function overlapsAny(x: number, z: number, w: number, d: number, list: BuildingBox[]): boolean {
   for (const b of list) {
-    if (Math.abs(x - b.x) < (w + b.w) / 2 + 0.6 && Math.abs(z - b.z) < (d + b.d) / 2 + 0.6) return true;
+    if (Math.abs(x - b.x) < (w + b.w) / 2 + 12 && Math.abs(z - b.z) < (d + b.d) / 2 + 12) return true;
   }
-  // 中央広場 (半径 8) と水辺 (z>24) も避ける
-  if (Math.hypot(x, z) < 10) return true;
+  if (Math.hypot(x, z) < 18) return true;
   return false;
 }
 
-/**
- * 超密集ネオン都市レイアウト。
- * 建物を隙間なく詰めて、ズートピア/シュガーラッシュ風の密度感を出す。
- */
 export function makeBuildings(): BuildingBox[] {
   const out: BuildingBox[] = [];
   const rng = mulberry32(42);
   const hues = [260, 280, 300, 320, 340, 200, 220, 180, 40, 30, 160, 50];
   const pickHue = () => hues[Math.floor(rng() * hues.length)] + (rng() - 0.5) * 30;
 
-  // ===== NE: エンタメ通り =====
-  out.push(
-    { x: 20, z: -24, w: 14, d: 12, h: 15, hue: 280, label: "🎤 콘서트홀", type: "concert" },
-    { x: 32, z: -14, w: 7, d: 6, h: 11, hue: 330, label: "🎵 라이브" },
-    { x: 35, z: -24, w: 6, d: 6, h: 22, hue: 260, label: "📺 MBC" },
-    { x: 28, z: -4, w: 6, d: 5, h: 10, hue: 290, label: "🎧 녹음실" },
-    { x: 22, z: -12, w: 5, d: 5, h: 12, hue: 310, label: "🎤 노래방" },
-  );
-  // ===== SE: ショッピング =====
-  out.push(
-    { x: 14, z: 5, w: 7, d: 6, h: 8, hue: 340, label: "☕ 카페", type: "cafe" },
-    { x: 24, z: 3, w: 6, d: 6, h: 11, hue: 40, label: "🛍️ 아이돌샵", type: "shop" },
-    { x: 17, z: 14, w: 8, d: 6, h: 7, hue: 15, label: "🍜 맛집" },
-    { x: 28, z: 10, w: 6, d: 5, h: 14, hue: 200, label: "📱 네오폴드" },
-    { x: 22, z: 20, w: 6, d: 5, h: 7, hue: 180, label: "🧋 피코소다" },
-    { x: 14, z: 20, w: 5, d: 5, h: 9, hue: 50, label: "🎮 게임센터" },
-  );
-  // ===== NW: 事務所エリア =====
-  out.push(
-    { x: -20, z: -25, w: 8, d: 7, h: 26, hue: 270, label: "🏢 에이전시", type: "agency" },
-    { x: -30, z: -18, w: 7, d: 6, h: 16, hue: 45, label: "👗 아틀리에", type: "agency" },
-    { x: -20, z: -15, w: 6, d: 6, h: 14, hue: 230, label: "📊 매니지먼트" },
-    { x: -30, z: -28, w: 9, d: 7, h: 20, hue: 310, label: "✨ MarinLuna" },
-    { x: -20, z: -35, w: 6, d: 5, h: 18, hue: 250, label: "📡 미디어" },
-  );
-  // ===== SW: 住宅 =====
-  out.push(
-    { x: -20, z: 6, w: 7, d: 6, h: 8, hue: 320, label: "🏠 레지던스", type: "residence" },
-    { x: -28, z: 10, w: 6, d: 6, h: 7, hue: 300, label: "🏠 아파트", type: "residence" },
-    { x: -22, z: 18, w: 7, d: 6, h: 6, hue: 30, label: "🐱 고양이카페", type: "cafe" },
-    { x: -14, z: 18, w: 5, d: 5, h: 8, hue: 350, label: "💈 뷰티살롱" },
-    { x: -26, z: 22, w: 6, d: 6, h: 9, hue: 210, label: "🏋️ 피트니스" },
-  );
+  const labels: { label: string; type?: BuildingBox["type"] }[] = [
+    { label: "🎤 콘서트홀", type: "concert" },
+    { label: "☕ 카페", type: "cafe" },
+    { label: "🛍️ 아이돌샵", type: "shop" },
+    { label: "🏢 에이전시", type: "agency" },
+    { label: "🏠 레지던스", type: "residence" },
+    { label: "🎵 라이브" },
+    { label: "📺 MBC" },
+    { label: "🎧 녹음실" },
+    { label: "🎤 노래방" },
+    { label: "🍜 맛집" },
+    { label: "📱 네오폴드" },
+    { label: "🧋 피코소다" },
+    { label: "🎮 게임센터" },
+    { label: "👗 아틀리에", type: "agency" },
+    { label: "📊 매니지먼트" },
+    { label: "✨ MarinLuna" },
+    { label: "📡 미디어" },
+    { label: "🐱 고양이카페", type: "cafe" },
+    { label: "💈 뷰티살롱" },
+    { label: "🏋️ 피트니스" },
+  ];
+  let labelIdx = 0;
 
-  // ===== 道路沿い密集ビル (東側1列目) =====
-  for (let z = -38; z <= 22; z += 3.5 + rng() * 2) {
-    const bw = 3 + rng() * 2.5;
-    const bd = 3 + rng() * 2;
-    const bh = 5 + rng() * 16;
-    const bx = 6.5 + bw / 2;
-    if (!overlapsAny(bx, z, bw, bd, out)) {
-      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
-    }
-  }
-  // 東側2列目
-  for (let z = -36; z <= 22; z += 4 + rng() * 2) {
-    const bw = 3.5 + rng() * 3;
-    const bd = 3 + rng() * 2.5;
-    const bh = 7 + rng() * 18;
-    const bx = 13 + rng() * 3;
-    if (!overlapsAny(bx, z, bw, bd, out)) {
-      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
-    }
-  }
-  // 東側3列目
-  for (let z = -34; z <= 22; z += 5 + rng() * 3) {
-    const bw = 4 + rng() * 4;
-    const bd = 4 + rng() * 3;
-    const bh = 10 + rng() * 22;
-    const bx = 22 + rng() * 5;
-    if (!overlapsAny(bx, z, bw, bd, out)) {
-      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
-    }
-  }
-  // 西側1列目
-  for (let z = -38; z <= 22; z += 3.5 + rng() * 2) {
-    const bw = 3 + rng() * 2.5;
-    const bd = 3 + rng() * 2;
-    const bh = 5 + rng() * 16;
-    const bx = -(6.5 + bw / 2);
-    if (!overlapsAny(bx, z, bw, bd, out)) {
-      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
-    }
-  }
-  // 西側2列目
-  for (let z = -36; z <= 22; z += 4 + rng() * 2) {
-    const bw = 3.5 + rng() * 3;
-    const bd = 3 + rng() * 2.5;
-    const bh = 7 + rng() * 18;
-    const bx = -(13 + rng() * 3);
-    if (!overlapsAny(bx, z, bw, bd, out)) {
-      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
-    }
-  }
-  // 西側3列目
-  for (let z = -34; z <= 22; z += 5 + rng() * 3) {
-    const bw = 4 + rng() * 4;
-    const bd = 4 + rng() * 3;
-    const bh = 10 + rng() * 22;
-    const bx = -(22 + rng() * 5);
-    if (!overlapsAny(bx, z, bw, bd, out)) {
-      out.push({ x: bx, z, w: bw, d: bd, h: bh, hue: pickHue() });
+  for (let gx = -200; gx <= 200; gx += 20) {
+    for (let gz = -180; gz <= 120; gz += 20) {
+      const cx = gx + (rng() - 0.5) * 8;
+      const cz = gz + (rng() - 0.5) * 8;
+      if (isOnRoad(cx, cz)) continue;
+      if (Math.hypot(cx, cz) < 18) continue;
+      if (cz > 130) continue;
+      if (Math.hypot(cx - LUNA_DOME.x, cz - LUNA_DOME.z) < LUNA_DOME.radius + 8) continue;
+      if (rng() < 0.3) continue;
+
+      const hRoll = rng();
+      let h: number;
+      if (hRoll < 0.4) h = 15 + rng() * 15;
+      else if (hRoll < 0.8) h = 30 + rng() * 30;
+      else h = 60 + rng() * 60;
+
+      const bw = 6 + rng() * 6;
+      const bd = 6 + rng() * 6;
+
+      if (overlapsAny(cx, cz, bw, bd, out)) continue;
+
+      const bld: BuildingBox = { x: cx, z: cz, w: bw, d: bd, h, hue: pickHue() };
+      if (labelIdx < labels.length && rng() < 0.25) {
+        bld.label = labels[labelIdx].label;
+        bld.type = labels[labelIdx].type;
+        labelIdx++;
+      }
+      out.push(bld);
     }
   }
 
-  // ===== 超密集スカイライン (背景) =====
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; labelIdx < labels.length && i < out.length; i++) {
+    if (!out[i].label) {
+      out[i].label = labels[labelIdx].label;
+      out[i].type = labels[labelIdx].type;
+      labelIdx++;
+    }
+  }
+
+  return out;
+}
+
+function makeSkyline(): BuildingBox[] {
+  const out: BuildingBox[] = [];
+  const rng = mulberry32(1234);
+  const hues = [260, 280, 300, 320, 340, 200, 220, 180, 40, 30];
+  for (let i = 0; i < 180; i++) {
     const angle = rng() * Math.PI * 2;
-    const dist = 36 + rng() * 35;
-    const bx = Math.cos(angle) * dist;
-    const bz = Math.sin(angle) * dist;
-    if (Math.abs(bx) < 8) continue;
-    if (bz > 26) continue; // 水辺方面は避ける
+    const dist = 300 + rng() * 200;
+    const x = Math.cos(angle) * dist;
+    const z = Math.sin(angle) * dist;
+    const scale = 1.2 + rng() * 0.3;
     out.push({
-      x: bx, z: bz,
-      w: 4 + rng() * 8,
-      d: 4 + rng() * 8,
-      h: 12 + rng() * 45,
-      hue: pickHue(),
+      x, z,
+      w: (8 + rng() * 12) * scale,
+      d: (8 + rng() * 12) * scale,
+      h: (20 + rng() * 80) * scale,
+      hue: hues[Math.floor(rng() * hues.length)] + (rng() - 0.5) * 30,
       skyline: true,
     });
   }
-
   return out;
 }
 
@@ -1449,118 +1502,325 @@ export const PHOTO_HALL = {
   hue: 320,
 };
 
+export const LUNA_DOME = {
+  x: 60,
+  z: -60,
+  radius: 28,
+  domeH: 22,
+  baseH: 6,
+  doorW: 5,
+};
+
+// ===== LUNA DOME (大規模コンサート会場) =====
+function LunaDome() {
+  const { x, z, radius, domeH, baseH, doorW } = LUNA_DOME;
+  const laserRef = useRef<THREE.Group>(null);
+
+  const signTex = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 1024;
+    c.height = 256;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    const g = ctx.createLinearGradient(0, 0, 1024, 0);
+    g.addColorStop(0, "#ff3d8b");
+    g.addColorStop(1, "#7b2cff");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 1024, 256);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 110px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "#ffd166";
+    ctx.shadowBlur = 24;
+    ctx.fillText("LUNA DOME", 512, 128);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+
+  const crowd = useMemo(() => {
+    const rng = mulberry32(3333);
+    const out: { x: number; y: number; z: number; color: string }[] = [];
+    const colors = ["#ff3d8b", "#00e6ff", "#7b2cff", "#ffd166"];
+    for (let i = 0; i < 80; i++) {
+      const angle = rng() * Math.PI * 2;
+      const r = 10 + rng() * 16;
+      const tier = Math.floor((r - 10) / 5.5);
+      out.push({
+        x: Math.cos(angle) * r,
+        y: 2 + tier * 1.8 + rng() * 0.6,
+        z: Math.sin(angle) * r,
+        color: colors[Math.floor(rng() * colors.length)],
+      });
+    }
+    return out;
+  }, []);
+
+  useFrame((state) => {
+    if (laserRef.current) {
+      laserRef.current.rotation.y = state.clock.elapsedTime * 0.15;
+    }
+  });
+
+  return (
+    <group position={[x, 0, z]}>
+      {/* ドーム外殻 (半球) */}
+      <mesh position={[0, baseH, 0]}>
+        <sphereGeometry args={[radius, 48, 32, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
+        <meshStandardMaterial color="#d8d8e8" metalness={0.5} roughness={0.25} side={THREE.DoubleSide} />
+      </mesh>
+      {/* グリッドワイヤーフレーム */}
+      <mesh position={[0, baseH, 0]}>
+        <sphereGeometry args={[radius + 0.15, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
+        <meshStandardMaterial color="#88ccff" wireframe transparent opacity={0.12} emissive="#88ccff" emissiveIntensity={0.6} toneMapped={false} />
+      </mesh>
+      {/* 円筒ベース */}
+      <mesh position={[0, baseH / 2, 0]}>
+        <cylinderGeometry args={[radius, radius + 1, baseH, 48]} />
+        <meshStandardMaterial color="#2a2040" metalness={0.6} roughness={0.3} side={THREE.DoubleSide} />
+      </mesh>
+      {/* ネオンバンド (ドーム接合部) */}
+      <mesh position={[0, baseH, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[radius, 0.15, 8, 48]} />
+        <meshStandardMaterial color="#ff3d8b" emissive="#ff3d8b" emissiveIntensity={2.5} toneMapped={false} />
+      </mesh>
+      {/* 地面ネオンリング */}
+      <mesh position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[radius + 1.5, 0.12, 8, 48]} />
+        <meshStandardMaterial color="#7b2cff" emissive="#7b2cff" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+
+      {/* エントランス (+z側) */}
+      <group position={[0, 0, radius]}>
+        <mesh position={[-doorW / 2 - 0.3, baseH / 2, 0]}>
+          <boxGeometry args={[0.6, baseH, 1.2]} />
+          <meshStandardMaterial color="#7b2cff" emissive="#7b2cff" emissiveIntensity={1.5} toneMapped={false} />
+        </mesh>
+        <mesh position={[doorW / 2 + 0.3, baseH / 2, 0]}>
+          <boxGeometry args={[0.6, baseH, 1.2]} />
+          <meshStandardMaterial color="#7b2cff" emissive="#7b2cff" emissiveIntensity={1.5} toneMapped={false} />
+        </mesh>
+        <mesh position={[0, baseH, 0]}>
+          <boxGeometry args={[doorW + 1.2, 0.5, 1.2]} />
+          <meshStandardMaterial color="#ff3d8b" emissive="#ff3d8b" emissiveIntensity={2} toneMapped={false} />
+        </mesh>
+        <pointLight position={[0, 3, 2]} intensity={2} color="#7b2cff" distance={15} />
+      </group>
+
+      {/* LUNA DOME サイン */}
+      {signTex && (
+        <mesh position={[0, baseH + 3.5, radius + 1.5]}>
+          <planeGeometry args={[16, 4]} />
+          <meshStandardMaterial map={signTex} emissive="#ffffff" emissiveMap={signTex} emissiveIntensity={1.2} toneMapped={false} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+
+      {/* ===== 内部 ===== */}
+      {/* ステージ (中央) */}
+      <mesh position={[0, 1, 0]}>
+        <cylinderGeometry args={[5, 6, 2, 24]} />
+        <meshStandardMaterial color="#1a0a30" emissive="#2a1050" emissiveIntensity={0.6} />
+      </mesh>
+      <mesh position={[0, 2.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[5, 24]} />
+        <meshStandardMaterial color="#ff3d8b" emissive="#ff3d8b" emissiveIntensity={0.8} transparent opacity={0.4} toneMapped={false} />
+      </mesh>
+
+      {/* 観客席 (3段の同心円リング) */}
+      {[0, 1, 2].map(tier => (
+        <mesh key={`tier${tier}`} position={[0, 1.5 + tier * 1.8, 0]}>
+          <torusGeometry args={[12 + tier * 5, 1.8, 4, 48]} />
+          <meshStandardMaterial color="#1a0e2e" emissive="#0a0518" emissiveIntensity={0.3} />
+        </mesh>
+      ))}
+
+      {/* 天井スクリーン (4面) */}
+      {[0, 1, 2, 3].map(i => {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        return (
+          <mesh key={`scr${i}`} position={[Math.cos(a) * 10, domeH - 4, Math.sin(a) * 10]} rotation={[0.25, -a + Math.PI / 2, 0]}>
+            <planeGeometry args={[7, 4]} />
+            <meshStandardMaterial color="#111" emissive="#88aaff" emissiveIntensity={0.9} toneMapped={false} side={THREE.DoubleSide} />
+          </mesh>
+        );
+      })}
+
+      {/* コンサート照明 */}
+      <pointLight position={[0, domeH - 2, 0]} intensity={3} color="#ff3d8b" distance={50} />
+      <pointLight position={[8, domeH - 5, 0]} intensity={2} color="#00e6ff" distance={35} />
+      <pointLight position={[-8, domeH - 5, 0]} intensity={2} color="#7b2cff" distance={35} />
+      <pointLight position={[0, domeH - 5, 8]} intensity={1.5} color="#ffd166" distance={30} />
+      <pointLight position={[0, domeH - 5, -8]} intensity={1.5} color="#ff3d8b" distance={30} />
+      <pointLight position={[0, 4, 0]} intensity={3} color="#ffffff" distance={12} />
+
+      {/* レーザービーム (回転) */}
+      <group ref={laserRef} position={[0, baseH + domeH * 0.3, 0]}>
+        {Array.from({ length: 8 }).map((_, i) => {
+          const a = (i / 8) * Math.PI * 2;
+          return (
+            <mesh key={`ls${i}`} rotation={[Math.cos(a) * 0.5, a, 0]}>
+              <cylinderGeometry args={[0.02, 0.02, domeH * 1.2, 4]} />
+              <meshStandardMaterial color="#00e6ff" emissive="#00e6ff" emissiveIntensity={5} transparent opacity={0.5} toneMapped={false} />
+            </mesh>
+          );
+        })}
+      </group>
+
+      {/* 観客ペンライト */}
+      {crowd.map((l, i) => (
+        <mesh key={`cl${i}`} position={[l.x, l.y, l.z]}>
+          <sphereGeometry args={[0.1, 4, 4]} />
+          <meshStandardMaterial color={l.color} emissive={l.color} emissiveIntensity={3} toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// ===== 道路ネットワーク =====
+function RoadNetwork() {
+  return (
+    <group>
+      {ROAD_XS.map((rx) => {
+        const w = roadWidth(rx);
+        return (
+          <group key={`vr${rx}`}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.01, 0]} receiveShadow>
+              <planeGeometry args={[w, 600]} />
+              <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx + w / 2 + 1, 0.02, 0]}>
+              <planeGeometry args={[2, 600]} />
+              <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx - w / 2 - 1, 0.02, 0]}>
+              <planeGeometry args={[2, 600]} />
+              <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
+            </mesh>
+            {rx === 0 && Array.from({ length: 30 }).map((_, i) => (
+              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.02, -145 + i * 10]}>
+                <planeGeometry args={[0.22, 2.4]} />
+                <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
+              </mesh>
+            ))}
+          </group>
+        );
+      })}
+      {ROAD_ZS.map((rz) => {
+        const w = roadWidth(rz);
+        return (
+          <group key={`hr${rz}`}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, rz]} receiveShadow>
+              <planeGeometry args={[600, w]} />
+              <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
+            </mesh>
+            {rz === 0 && Array.from({ length: 30 }).map((_, i) => (
+              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[-145 + i * 10, 0.02, rz]}>
+                <planeGeometry args={[2.4, 0.22]} />
+                <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
+              </mesh>
+            ))}
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
 // ===== 街全体 =====
 function City() {
   const buildings = useMemo(() => makeBuildings(), []);
+  const skyline = useMemo(() => makeSkyline(), []);
 
   const palms = useMemo(() => {
     const rng = mulberry32(555);
     const out: { x: number; z: number; s: number }[] = [];
-    // 道路沿いヤシ並木
-    for (let i = -8; i <= 5; i++) {
-      out.push({ x: -5.2, z: i * 5 + 2, s: 0.8 + rng() * 0.15 });
-      out.push({ x: 5.2, z: i * 5 - 2, s: 0.8 + rng() * 0.15 });
+    for (const rx of ROAD_XS) {
+      for (let z = -200; z <= 120; z += 20) {
+        const w = roadWidth(rx);
+        out.push({ x: rx + w / 2 + 2.5, z: z + rng() * 6, s: 1.2 + rng() * 0.3 });
+        out.push({ x: rx - w / 2 - 2.5, z: z + rng() * 6, s: 1.2 + rng() * 0.3 });
+      }
     }
-    // 水辺沿いの熱帯ヤシ
-    for (let i = -8; i <= 8; i++) {
-      out.push({ x: i * 8, z: 23 + rng() * 3, s: 0.9 + rng() * 0.3 });
+    for (let x = -200; x <= 200; x += 20) {
+      out.push({ x: x + rng() * 6, z: 128 + rng() * 4, s: 1.4 + rng() * 0.4 });
     }
-    // 広場周辺
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      out.push({ x: Math.cos(a) * 9, z: Math.sin(a) * 9, s: 0.7 + rng() * 0.2 });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      out.push({ x: Math.cos(a) * 14, z: Math.sin(a) * 14, s: 1.0 + rng() * 0.2 });
+    }
+    return out;
+  }, []);
+
+  const streetLamps = useMemo(() => {
+    const out: { x: number; z: number }[] = [];
+    for (const rx of ROAD_XS) {
+      const w = roadWidth(rx);
+      for (let z = -180; z <= 120; z += 30) {
+        out.push({ x: rx + w / 2 + 1.5, z });
+        out.push({ x: rx - w / 2 - 1.5, z });
+      }
     }
     return out;
   }, []);
 
   return (
     <group>
-      {/* 地面 */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, 0]}>
-        <planeGeometry args={[400, 400]} />
+        <planeGeometry args={[700, 700]} />
         <meshStandardMaterial color="#120a22" />
       </mesh>
-      {/* メインストリート */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
-        <planeGeometry args={[8, 400]} />
-        <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
-      </mesh>
-      {/* 歩道 (両サイド) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[4.8, 0.02, 0]}>
-        <planeGeometry args={[1.6, 400]} />
-        <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-4.8, 0.02, 0]}>
-        <planeGeometry args={[1.6, 400]} />
-        <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
-      </mesh>
-      {/* レーンダッシュ */}
-      {Array.from({ length: 50 }).map((_, i) => (
-        <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, -245 + i * 10]}>
-          <planeGeometry args={[0.22, 2.4]} />
-          <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
-        </mesh>
-      ))}
 
-      {/* 中央広場 */}
+      <RoadNetwork />
       <CentralPlaza />
-      {/* エリア標識 */}
-      <AreaSign x={22}  z={-18} text="🎤 엔터테인먼트" rotY={0} />
-      <AreaSign x={22}  z={10}  text="🛍️ 쇼핑거리" rotY={0} />
-      <AreaSign x={-22} z={-20} text="🏢 에이전시" rotY={0} />
-      <AreaSign x={-22} z={12}  text="🏠 주거지역" rotY={0} />
 
-      {/* 密集ビル群 */}
+      <AreaSign x={55}  z={-55} text="🎤 엔터테인먼트" rotY={0} />
+      <AreaSign x={55}  z={55}  text="🛍️ 쇼핑거리" rotY={0} />
+      <AreaSign x={-55} z={-55} text="🏢 에이전시" rotY={0} />
+      <AreaSign x={-55} z={55}  text="🏠 주거지역" rotY={0} />
+
       {buildings.map((b, i) => (
-        <Building key={i} {...b} />
+        <Building key={`fg${i}`} {...b} />
       ))}
-      {/* 写真館 */}
-      <PhotoHall />
+      {skyline.map((b, i) => (
+        <Building key={`sk${i}`} {...b} />
+      ))}
 
-      {/* 水辺 (リゾート) */}
+      <PhotoHall />
+      <LunaDome />
       <WaterBody />
-      {/* モノレール */}
       <MonorailTrack />
       <MonorailTrain />
 
-      {/* ヤシの木 (密集) */}
       {palms.map((p, i) => (
         <Palm key={i} x={p.x} z={p.z} scale={p.s} />
       ))}
 
-      {/* 巨大ホログラム看板 */}
-      <Billboard x={0} y={24} z={-34} text="MarinLuna" subText="Rise to Fame" colorA="#ff3d8b" colorB="#7b2cff" width={26} height={7} />
-      <HologramFigure x={0} y={32} z={-34} />
-      <Billboard x={0} y={20} z={24} text="📍 서울" subText="NEON PARADISE" colorA="#00e6ff" colorB="#7b2cff" rotationY={Math.PI} width={22} height={5.5} />
-      <HologramFigure x={0} y={27} z={24} />
-      {/* 側面巨大看板 */}
-      <Billboard x={-40} y={20} z={-10} text="✨ DREAM STAGE" subText="꿈의 무대" colorA="#ffd166" colorB="#ff3d8b" rotationY={Math.PI / 2} width={18} height={5} />
-      <Billboard x={40} y={18} z={5} text="🎤 데뷔" subText="THE WORLD IS WATCHING" colorA="#7b2cff" colorB="#00e6ff" rotationY={-Math.PI / 2} width={18} height={5} />
-      <Billboard x={-35} y={15} z={15} text="🌴 파라다이스" subText="TROPICAL CITY" colorA="#44ddaa" colorB="#00bbff" rotationY={Math.PI / 3} width={14} height={4} />
-      <Billboard x={35} y={16} z={-20} text="🎵 K-POP" subText="LIVE TONIGHT" colorA="#ff66aa" colorB="#ffaa44" rotationY={-Math.PI / 3} width={14} height={4} />
+      <Billboard x={0} y={35} z={-100} text="MarinLuna" subText="Rise to Fame" colorA="#ff3d8b" colorB="#7b2cff" width={30} height={8} />
+      <HologramFigure x={0} y={45} z={-100} />
+      <Billboard x={0} y={28} z={110} text="📍 서울" subText="NEON PARADISE" colorA="#00e6ff" colorB="#7b2cff" rotationY={Math.PI} width={26} height={6} />
+      <HologramFigure x={0} y={36} z={110} />
+      <Billboard x={-120} y={30} z={-30} text="✨ DREAM STAGE" subText="꿈의 무대" colorA="#ffd166" colorB="#ff3d8b" rotationY={Math.PI / 2} width={22} height={6} />
+      <Billboard x={120} y={28} z={30} text="🎤 데뷔" subText="THE WORLD IS WATCHING" colorA="#7b2cff" colorB="#00e6ff" rotationY={-Math.PI / 2} width={22} height={6} />
+      <Billboard x={-100} y={22} z={60} text="🌴 파라다이스" subText="TROPICAL CITY" colorA="#44ddaa" colorB="#00bbff" rotationY={Math.PI / 3} width={18} height={5} />
+      <Billboard x={100} y={24} z={-60} text="🎵 K-POP" subText="LIVE TONIGHT" colorA="#ff66aa" colorB="#ffaa44" rotationY={-Math.PI / 3} width={18} height={5} />
 
-      {/* 広告枠 (建物側面) */}
       <CityAdBoards />
-
-      {/* 街の生命: 車・歩行者・空飛ぶ乗り物 */}
       <NPCCars />
       <NPCPedestrians />
       <FlyingVehicles />
 
-      {/* 街灯 (道路沿い) */}
-      {Array.from({ length: 16 }).map((_, i) => {
-        const z = -35 + i * 4.5;
-        const side = i % 2 === 0 ? 4 : -4;
-        return (
-          <group key={`lamp${i}`}>
-            <mesh position={[side, 2, z]}>
-              <cylinderGeometry args={[0.04, 0.06, 4, 6]} />
-              <meshStandardMaterial color="#444" />
-            </mesh>
-            <pointLight position={[side, 4.2, z]} intensity={0.6} color="#ffddaa" distance={8} />
-          </group>
-        );
-      })}
+      {streetLamps.map((l, i) => (
+        <group key={`sl${i}`}>
+          <mesh position={[l.x, 3, l.z]}>
+            <cylinderGeometry args={[0.06, 0.08, 6, 6]} />
+            <meshStandardMaterial color="#444" />
+          </mesh>
+          <pointLight position={[l.x, 6.2, l.z]} intensity={0.5} color="#ffddaa" distance={14} />
+        </group>
+      ))}
     </group>
   );
 }
@@ -1764,6 +2024,15 @@ function collidesBuildings(
     }
     return true;
   }
+  // LUNA DOME: 円形壁 + 入口開口
+  const dd = LUNA_DOME;
+  const ddx = px - dd.x;
+  const ddz = pz - dd.z;
+  const dDist = Math.hypot(ddx, ddz);
+  if (dDist > dd.radius - r && dDist < dd.radius + r) {
+    if (ddz > 0 && Math.abs(ddx) < dd.doorW / 2) return false;
+    return true;
+  }
   return false;
 }
 
@@ -1795,7 +2064,7 @@ function Player({
     // right = cross(forward, up) を Three.js (y-up 右手系) で展開すると
     // rightX = -cos(yaw), rightZ = sin(yaw) になる。
     // ここを誤ると左右が逆になるので要注意。
-    const speed = 5.5;
+    const speed = 8;
     const mag = Math.hypot(jx, jy);
     const forwardX = Math.sin(camYaw);
     const forwardZ = Math.cos(camYaw);
@@ -1811,8 +2080,8 @@ function Player({
     }
 
     // スライド衝突: X/Z 軸を独立に試して、壁にぶつかった軸だけ戻す
-    const nextX = THREE.MathUtils.clamp(posRef.current.x + dx, -70, 70);
-    const nextZ = THREE.MathUtils.clamp(posRef.current.z + dz, -90, 90);
+    const nextX = THREE.MathUtils.clamp(posRef.current.x + dx, -240, 240);
+    const nextZ = THREE.MathUtils.clamp(posRef.current.z + dz, -240, 240);
     if (!collidesBuildings(nextX, posRef.current.z, buildings)) {
       posRef.current.x = nextX;
     }
@@ -1900,14 +2169,14 @@ function DynamicLighting() {
       ambCol = lerpHex("#6050a0", "#8899bb", t);
       dirCol = lerpHex("#ff8844", "#ffeedd", t);
       const fogCol = new THREE.Color(lerpHex("#1a0a2e", "#aabbcc", t * 0.5));
-      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.009 - t * 0.003);
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.004 - t * 0.001);
     } else if (phase === "day") {
       ambI = 0.6;
       dirI = 1.1;
       neonI = 0.15;
       ambCol = "#8899bb";
       dirCol = "#ffeedd";
-      scene.fog = new THREE.FogExp2(0x8899bb, 0.006);
+      scene.fog = new THREE.FogExp2(0x8899bb, 0.0025);
     } else {
       ambI = 0.6 - t * 0.45;
       dirI = 1.1 - t * 0.9;
@@ -1915,7 +2184,7 @@ function DynamicLighting() {
       ambCol = lerpHex("#8899bb", "#2a1848", t);
       dirCol = lerpHex("#ffeedd", "#443366", t);
       const fogCol = new THREE.Color(lerpHex("#8899bb", "#0e0620", t));
-      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.006 + t * 0.005);
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.003 + t * 0.002);
     }
 
     if (ambRef.current) { ambRef.current.intensity = ambI; ambRef.current.color.set(ambCol); }
@@ -1951,7 +2220,7 @@ function SceneInner({
 }) {
   const { scene } = useThree();
   useEffect(() => {
-    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.009);
+    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.004);
     scene.background = null;
   }, [scene]);
 
@@ -2024,7 +2293,7 @@ export function City3D({ avatar }: { avatar: UserAvatar }) {
     <div className="absolute inset-0 z-0 select-none">
       <Canvas
         shadows
-        camera={{ position: [0, 8, 14], fov: 62, near: 0.1, far: 500 }}
+        camera={{ position: [0, 8, 14], fov: 62, near: 0.1, far: 1200 }}
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
