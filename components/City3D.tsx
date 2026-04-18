@@ -39,7 +39,7 @@ type InputState = {
 };
 
 function makeInputState(): InputState {
-  return { move: { x: 0, y: 0 }, camYaw: 0, camPitch: 0.45 };
+  return { move: { x: 0, y: 0 }, camYaw: 0, camPitch: 0.6 };
 }
 
 // ===== バーチャルジョイスティック (左下) =====
@@ -654,6 +654,36 @@ function Building({
           distance={8}
         />
       )}
+      {/* 高層ビルにはアンテナ + 赤ランプ */}
+      {h > 12 && (
+        <>
+          <mesh position={[0, h / 2 + 1.5, 0]}>
+            <cylinderGeometry args={[0.05, 0.05, 3, 6]} />
+            <meshStandardMaterial color="#333" />
+          </mesh>
+          <mesh position={[0, h / 2 + 3.2, 0]}>
+            <sphereGeometry args={[0.1, 8, 8]} />
+            <meshStandardMaterial
+              color="#ff3d8b"
+              emissive="#ff3d8b"
+              emissiveIntensity={3}
+              toneMapped={false}
+            />
+          </mesh>
+        </>
+      )}
+      {/* ラベル付きビルは右側面に縦ネオンストリップ */}
+      {label && (
+        <mesh position={[w / 2 + 0.03, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[0.25, h * 0.6]} />
+          <meshStandardMaterial
+            color={accent}
+            emissive={accent}
+            emissiveIntensity={1.8}
+            toneMapped={false}
+          />
+        </mesh>
+      )}
     </group>
   );
 }
@@ -841,6 +871,297 @@ function AreaSign({
       />
     </mesh>
   ) : null;
+}
+
+// ===== 夕焼け→夜空 =====
+function SunsetSky() {
+  const tex = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 1;
+    c.height = 512;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    const g = ctx.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0, "#060318");
+    g.addColorStop(0.25, "#0e0630");
+    g.addColorStop(0.45, "#2a1058");
+    g.addColorStop(0.6, "#6b2060");
+    g.addColorStop(0.75, "#c04848");
+    g.addColorStop(0.88, "#e87040");
+    g.addColorStop(0.96, "#ffaa44");
+    g.addColorStop(1.0, "#ffcc66");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 1, 512);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+
+  return tex ? (
+    <mesh>
+      <sphereGeometry args={[190, 32, 32]} />
+      <meshBasicMaterial map={tex} side={THREE.BackSide} />
+    </mesh>
+  ) : null;
+}
+
+// ===== ホログラム =====
+function HologramFigure({ x, y, z }: { x: number; y: number; z: number }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((state) => {
+    if (!ref.current) return;
+    ref.current.position.y = y + Math.sin(state.clock.elapsedTime * 1.2) * 0.5;
+    ref.current.rotation.y = state.clock.elapsedTime * 0.3;
+  });
+
+  return (
+    <group ref={ref} position={[x, y, z]}>
+      <mesh>
+        <capsuleGeometry args={[0.6, 2.5, 8, 16]} />
+        <meshStandardMaterial
+          color="#00e6ff"
+          emissive="#00e6ff"
+          emissiveIntensity={2}
+          transparent
+          opacity={0.25}
+          toneMapped={false}
+          wireframe
+        />
+      </mesh>
+      <mesh position={[0, 2.0, 0]}>
+        <sphereGeometry args={[0.5, 16, 16]} />
+        <meshStandardMaterial
+          color="#ff3d8b"
+          emissive="#ff3d8b"
+          emissiveIntensity={2}
+          transparent
+          opacity={0.2}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh position={[0, -1.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1.2, 0.05, 8, 32]} />
+        <meshStandardMaterial
+          color="#00e6ff"
+          emissive="#00e6ff"
+          emissiveIntensity={3}
+          transparent
+          opacity={0.5}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+// ===== 空飛ぶ乗り物 =====
+function FlyingVehicle({
+  radius,
+  height,
+  speed,
+  phase,
+  color,
+}: {
+  radius: number;
+  height: number;
+  speed: number;
+  phase: number;
+  color: string;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const col = useMemo(() => new THREE.Color(color), [color]);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime * speed + phase;
+    ref.current.position.set(
+      Math.cos(t) * radius,
+      height + Math.sin(t * 2) * 2,
+      Math.sin(t) * radius
+    );
+    ref.current.rotation.y = -t + Math.PI / 2;
+  });
+
+  return (
+    <group ref={ref}>
+      <mesh rotation={[0, 0, Math.PI / 2]}>
+        <capsuleGeometry args={[0.3, 1.8, 8, 12]} />
+        <meshStandardMaterial
+          color={col}
+          emissive={col}
+          emissiveIntensity={2}
+          toneMapped={false}
+          metalness={0.8}
+          roughness={0.2}
+        />
+      </mesh>
+      <pointLight position={[0, 0, -1]} intensity={1} color={color} distance={15} />
+      <mesh position={[0, 0, -1.2]}>
+        <sphereGeometry args={[0.15, 8, 8]} />
+        <meshStandardMaterial
+          color={col}
+          emissive={col}
+          emissiveIntensity={4}
+          transparent
+          opacity={0.6}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function FlyingVehicles() {
+  const vehicles = useMemo(
+    () => [
+      { radius: 50, height: 35, speed: 0.15, phase: 0, color: "#ff3d8b" },
+      { radius: 65, height: 42, speed: -0.1, phase: Math.PI * 0.7, color: "#00e6ff" },
+      { radius: 40, height: 30, speed: 0.2, phase: Math.PI * 1.3, color: "#ffd166" },
+      { radius: 55, height: 38, speed: -0.12, phase: Math.PI * 0.3, color: "#7b2cff" },
+    ],
+    []
+  );
+  return (
+    <>
+      {vehicles.map((v, i) => (
+        <FlyingVehicle key={i} {...v} />
+      ))}
+    </>
+  );
+}
+
+// ===== NPC 車 =====
+function NPCCar({
+  lane,
+  speed,
+  offset,
+  color,
+}: {
+  lane: number;
+  speed: number;
+  offset: number;
+  color: string;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const col = useMemo(() => new THREE.Color(color), [color]);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const raw = state.clock.elapsedTime * speed + offset;
+    const z = (((raw % 180) + 180) % 180) - 90;
+    ref.current.position.set(lane, 0.35, z);
+    ref.current.rotation.y = speed > 0 ? 0 : Math.PI;
+  });
+
+  return (
+    <group ref={ref}>
+      <mesh position={[0, 0.2, 0]}>
+        <boxGeometry args={[1.0, 0.5, 2.2]} />
+        <meshStandardMaterial color={col} metalness={0.6} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.55, -0.1]}>
+        <boxGeometry args={[0.85, 0.35, 1.2]} />
+        <meshStandardMaterial color="#111" metalness={0.9} roughness={0.1} />
+      </mesh>
+      <mesh position={[0.35, 0.2, 1.15]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial color="#ffffcc" emissive="#ffffcc" emissiveIntensity={3} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.35, 0.2, 1.15]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshStandardMaterial color="#ffffcc" emissive="#ffffcc" emissiveIntensity={3} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.35, 0.2, -1.15]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial color="#ff2222" emissive="#ff2222" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.35, 0.2, -1.15]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial color="#ff2222" emissive="#ff2222" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function NPCCars() {
+  const cars = useMemo(() => {
+    const rng = mulberry32(999);
+    const colors = ["#ff3d8b", "#7b2cff", "#ffd166", "#00e6ff", "#ff6644", "#44ff88"];
+    return Array.from({ length: 6 }, (_, i) => ({
+      lane: i % 2 === 0 ? 1.8 : -1.8,
+      speed: (1.5 + rng() * 2) * (i % 2 === 0 ? 1 : -1),
+      offset: rng() * 200 - 100,
+      color: colors[i % colors.length],
+    }));
+  }, []);
+  return (
+    <>
+      {cars.map((c, i) => (
+        <NPCCar key={i} {...c} />
+      ))}
+    </>
+  );
+}
+
+// ===== NPC 歩行者 =====
+function NPCPedestrian({
+  lane,
+  speed,
+  offset,
+  skinHue,
+  outfitHue,
+}: {
+  lane: number;
+  speed: number;
+  offset: number;
+  skinHue: number;
+  outfitHue: number;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const skin = useMemo(() => new THREE.Color(`hsl(${skinHue}, 50%, 70%)`), [skinHue]);
+  const outfit = useMemo(() => new THREE.Color(`hsl(${outfitHue}, 70%, 45%)`), [outfitHue]);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const raw = state.clock.elapsedTime * speed + offset;
+    const z = (((raw % 100) + 100) % 100) - 50;
+    ref.current.position.set(lane, 0, z);
+    ref.current.rotation.y = speed > 0 ? 0 : Math.PI;
+  });
+
+  return (
+    <group ref={ref}>
+      <mesh position={[0, 1.0, 0]}>
+        <capsuleGeometry args={[0.18, 0.8, 8, 12]} />
+        <meshStandardMaterial color={outfit} emissive={outfit} emissiveIntensity={0.1} />
+      </mesh>
+      <mesh position={[0, 1.55, 0]}>
+        <sphereGeometry args={[0.16, 12, 12]} />
+        <meshStandardMaterial color={skin} />
+      </mesh>
+    </group>
+  );
+}
+
+function NPCPedestrians() {
+  const peds = useMemo(() => {
+    const rng = mulberry32(7777);
+    return Array.from({ length: 10 }, () => ({
+      lane: (rng() > 0.5 ? 4.5 : -4.5) + (rng() - 0.5) * 1.5,
+      speed: (0.8 + rng() * 1.2) * (rng() > 0.5 ? 1 : -1),
+      offset: rng() * 120 - 60,
+      skinHue: Math.floor(rng() * 40 + 15),
+      outfitHue: Math.floor(rng() * 360),
+    }));
+  }, []);
+  return (
+    <>
+      {peds.map((p, i) => (
+        <NPCPedestrian key={i} {...p} />
+      ))}
+    </>
+  );
 }
 
 // ===== ヤシの木 =====
@@ -1061,26 +1382,62 @@ function City() {
       {/* 巨大ホログラム看板 (運営の世界観コピー) */}
       <Billboard
         x={0}
-        y={14}
-        z={-30}
+        y={22}
+        z={-32}
         text="MarinLuna"
         subText="Rise to Fame"
         colorA="#ff3d8b"
         colorB="#7b2cff"
+        width={24}
+        height={6}
       />
+      <HologramFigure x={0} y={28} z={-32} />
       <Billboard
         x={0}
-        y={12}
-        z={30}
+        y={20}
+        z={32}
         text="📍 Seoul"
         subText="K-POP × LA STREET"
         colorA="#00e6ff"
         colorB="#7b2cff"
         rotationY={Math.PI}
+        width={20}
+        height={5}
+      />
+      <HologramFigure x={0} y={26} z={32} />
+      {/* 側面の巨大看板 */}
+      <Billboard
+        x={-38}
+        y={18}
+        z={-10}
+        text="✨ DREAM STAGE"
+        subText="YOUR IDOL AWAITS"
+        colorA="#ffd166"
+        colorB="#ff3d8b"
+        rotationY={Math.PI / 2}
+        width={16}
+        height={4.5}
+      />
+      <Billboard
+        x={38}
+        y={16}
+        z={8}
+        text="🎤 DEBUT NOW"
+        subText="THE WORLD IS WATCHING"
+        colorA="#7b2cff"
+        colorB="#00e6ff"
+        rotationY={-Math.PI / 2}
+        width={16}
+        height={4.5}
       />
 
       {/* 街の広告枠 (admin/user/empty を slotKind バッジ付きで表示) */}
       <CityAdBoards />
+
+      {/* NPC 車 & 歩行者 & 空飛ぶ乗り物 */}
+      <NPCCars />
+      <NPCPedestrians />
+      <FlyingVehicles />
     </group>
   );
 }
@@ -1308,7 +1665,7 @@ function Player({
     const dtc = Math.min(dt, 0.05); // 大きい dt はクランプ
     const { x: jx, y: jy } = input.current.move;
     const camYaw = input.current.camYaw;
-    const camPitch = THREE.MathUtils.clamp(input.current.camPitch, 0.15, 1.0);
+    const camPitch = THREE.MathUtils.clamp(input.current.camPitch, 0.15, 1.15);
 
     // カメラ相対の移動方向を計算
     // forward = カメラ→アバター方向 (画面奥), right = 画面右方向。
@@ -1374,10 +1731,10 @@ function Player({
     }
 
     // 三人称カメラ: アバターから (camYaw, camPitch) 方向後方に距離Dの位置
-    const D = 5.5;
+    const D = 8;
     const camOffsetX = Math.sin(camYaw) * Math.cos(camPitch) * D;
     const camOffsetZ = Math.cos(camYaw) * Math.cos(camPitch) * D;
-    const camOffsetY = Math.sin(camPitch) * D + 1.6;
+    const camOffsetY = Math.sin(camPitch) * D + 2.2;
     const targetCam = new THREE.Vector3(
       posRef.current.x - camOffsetX,
       camOffsetY,
@@ -1410,24 +1767,35 @@ function SceneInner({
 }) {
   const { scene } = useThree();
   useEffect(() => {
-    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.012);
-    scene.background = new THREE.Color(0x14081e);
+    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.009);
+    scene.background = null;
   }, [scene]);
 
   return (
     <>
-      <ambientLight intensity={0.45} color="#7c66c4" />
-      <hemisphereLight args={["#ff8acc", "#1a0a30", 0.6]} />
+      <SunsetSky />
+      {/* 夕暮れの太陽光 (低い角度・暖色) */}
+      <ambientLight intensity={0.35} color="#9070a0" />
+      <hemisphereLight args={["#ff9966", "#1a0a30", 0.55]} />
       <directionalLight
-        position={[20, 30, 10]}
-        intensity={0.9}
-        color="#ffd6f0"
+        position={[40, 12, -20]}
+        intensity={1.1}
+        color="#ffaa66"
         castShadow
       />
+      {/* 空の残照 (上方向の柔らかい紫) */}
+      <directionalLight
+        position={[-10, 50, 0]}
+        intensity={0.3}
+        color="#cc88ff"
+      />
       {/* ネオン感を出す追加ポイントライト (中央) */}
-      <pointLight position={[0, 8, 0]} intensity={1.6} color="#ff3d8b" distance={40} />
-      <pointLight position={[10, 6, -8]} intensity={1.2} color="#7b2cff" distance={30} />
-      <pointLight position={[-10, 6, 10]} intensity={1.2} color="#00e6ff" distance={30} />
+      <pointLight position={[0, 8, 0]} intensity={1.8} color="#ff3d8b" distance={45} />
+      <pointLight position={[10, 6, -8]} intensity={1.4} color="#7b2cff" distance={35} />
+      <pointLight position={[-10, 6, 10]} intensity={1.4} color="#00e6ff" distance={35} />
+      {/* 地平線の夕焼けグロー */}
+      <pointLight position={[60, 3, -30]} intensity={2} color="#ff6633" distance={80} />
+      <pointLight position={[-60, 3, 30]} intensity={1.5} color="#ff8844" distance={60} />
       <City />
       <Player avatar={avatar} input={input} onEnterGallery={onEnterGallery} />
     </>
@@ -1493,7 +1861,7 @@ export function City3D({ avatar }: { avatar: UserAvatar }) {
     <div className="absolute inset-0 z-0 select-none">
       <Canvas
         shadows
-        camera={{ position: [0, 3, 8], fov: 55, near: 0.1, far: 400 }}
+        camera={{ position: [0, 8, 14], fov: 62, near: 0.1, far: 500 }}
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
@@ -1508,7 +1876,7 @@ export function City3D({ avatar }: { avatar: UserAvatar }) {
           inputRef.current.camPitch = THREE.MathUtils.clamp(
             inputRef.current.camPitch + dy * 0.004,
             0.15,
-            1.0
+            1.15
           );
         }}
       />
