@@ -667,85 +667,172 @@ function Windows({
   );
 }
 
-// ===== 中央広場 (噴水 + ステージ) =====
+// ===== 中央広場 (ヴィッラ・デステ風多段カスケード噴水) =====
 function CentralPlaza() {
-  const waterCol = useMemo(() => new THREE.Color("#00e6ff"), []);
+  const waterRef = useRef<THREE.Group>(null);
+  useFrame((state) => {
+    if (!waterRef.current) return;
+    const t = state.clock.elapsedTime;
+    waterRef.current.children.forEach((c, i) => {
+      if ((c as THREE.Mesh).material && "opacity" in (c as THREE.Mesh).material) {
+        ((c as THREE.Mesh).material as THREE.MeshStandardMaterial).opacity =
+          0.35 + Math.sin(t * 2.5 + i * 0.7) * 0.15;
+      }
+    });
+  });
+
   return (
     <group position={[0, 0, 0]}>
-      {/* 広場の床 (円形タイル) */}
+      {/* 広場の床 (石畳) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
-        <circleGeometry args={[8, 48]} />
-        <meshStandardMaterial
-          color="#1a0a30"
-          emissive="#2a1050"
-          emissiveIntensity={0.5}
-        />
+        <circleGeometry args={[12, 48]} />
+        <meshStandardMaterial color="#3a2a18" emissive="#1a0e06" emissiveIntensity={0.2} roughness={0.85} />
       </mesh>
-      {/* 噴水ベース */}
-      <mesh position={[0, 0.4, 0]}>
-        <cylinderGeometry args={[2.5, 3, 0.8, 32]} />
-        <meshStandardMaterial color="#2a1050" />
+
+      {/* ===== ベースプール (最下段) ===== */}
+      <mesh position={[0, 0.25, 0]}>
+        <torusGeometry args={[5.8, 0.5, 8, 36]} />
+        <meshStandardMaterial color="#b8956a" metalness={0.15} roughness={0.75} />
       </mesh>
-      {/* 水面 */}
-      <mesh position={[0, 0.82, 0]}>
-        <cylinderGeometry args={[2.3, 2.3, 0.05, 32]} />
-        <meshStandardMaterial
-          color={waterCol}
-          emissive={waterCol}
-          emissiveIntensity={0.6}
-          transparent
-          opacity={0.7}
-          toneMapped={false}
-        />
+      <mesh position={[0, 0.15, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[5.5, 36]} />
+        <meshStandardMaterial color="#6699aa" emissive="#445566" emissiveIntensity={0.5} transparent opacity={0.7} metalness={0.4} roughness={0.15} />
       </mesh>
-      {/* 中央柱 */}
-      <mesh position={[0, 2.0, 0]}>
-        <cylinderGeometry args={[0.2, 0.3, 2.4, 12]} />
-        <meshStandardMaterial
-          color="#d4af37"
-          emissive="#ffd166"
-          emissiveIntensity={0.5}
-          metalness={0.8}
-          roughness={0.3}
-        />
+
+      {/* ===== 第1段 (ワイドステップ) ===== */}
+      <mesh position={[0, 0.6, 0]}>
+        <cylinderGeometry args={[4.0, 4.5, 0.8, 28]} />
+        <meshStandardMaterial color="#b8956a" metalness={0.12} roughness={0.78} />
       </mesh>
-      {/* 上部の星オブジェ */}
-      <mesh position={[0, 3.5, 0]} rotation={[0, Math.PI / 4, 0]}>
-        <octahedronGeometry args={[0.5]} />
-        <meshStandardMaterial
-          color="#ffd166"
-          emissive="#ffd166"
-          emissiveIntensity={2}
-          toneMapped={false}
-        />
+      {/* 段上の水面 */}
+      <mesh position={[0, 1.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[3.8, 28]} />
+        <meshStandardMaterial color="#7799aa" emissive="#556677" emissiveIntensity={0.4} transparent opacity={0.6} metalness={0.3} roughness={0.2} />
       </mesh>
-      {/* 噴水ライト */}
-      <pointLight
-        position={[0, 2, 0]}
-        intensity={2.5}
-        color="#00e6ff"
-        distance={15}
-      />
-      {/* 広場四隅のネオンポール */}
-      {[
-        [5.5, 5.5],
-        [-5.5, 5.5],
-        [5.5, -5.5],
-        [-5.5, -5.5],
-      ].map(([px, pz], i) => (
-        <group key={i} position={[px, 0, pz]}>
-          <mesh position={[0, 1.5, 0]}>
-            <cylinderGeometry args={[0.06, 0.06, 3, 8]} />
-            <meshStandardMaterial color="#1a0a30" />
+      {/* カスケード (第1段→プール) */}
+      <group ref={waterRef}>
+        {Array.from({ length: 16 }).map((_, i) => {
+          const a = (i / 16) * Math.PI * 2;
+          return (
+            <mesh key={`c1${i}`} position={[Math.cos(a) * 4.3, 0.5, Math.sin(a) * 4.3]} rotation={[0, -a, 0]}>
+              <planeGeometry args={[1.4, 0.7]} />
+              <meshStandardMaterial color="#bbddee" emissive="#99bbcc" emissiveIntensity={0.8} transparent opacity={0.35} toneMapped={false} side={THREE.DoubleSide} />
+            </mesh>
+          );
+        })}
+      </group>
+
+      {/* ===== 第2段 ===== */}
+      <mesh position={[0, 1.4, 0]}>
+        <cylinderGeometry args={[2.6, 3.2, 0.9, 22]} />
+        <meshStandardMaterial color="#8b7050" metalness={0.2} roughness={0.72} />
+      </mesh>
+      {/* カスケード (第2段→第1段) */}
+      {Array.from({ length: 10 }).map((_, i) => {
+        const a = (i / 10) * Math.PI * 2;
+        return (
+          <mesh key={`c2${i}`} position={[Math.cos(a) * 2.9, 1.2, Math.sin(a) * 2.9]} rotation={[0, -a, 0]}>
+            <planeGeometry args={[1.0, 0.5]} />
+            <meshStandardMaterial color="#bbddee" emissive="#99bbcc" emissiveIntensity={0.7} transparent opacity={0.3} toneMapped={false} side={THREE.DoubleSide} />
           </mesh>
-          <pointLight
-            position={[0, 3, 0]}
-            intensity={0.9}
-            color={i % 2 === 0 ? "#ff3d8b" : "#7b2cff"}
-            distance={10}
-          />
+        );
+      })}
+
+      {/* ===== 第3段 (中央台座) ===== */}
+      <mesh position={[0, 2.2, 0]}>
+        <cylinderGeometry args={[1.4, 2.0, 1.0, 16]} />
+        <meshStandardMaterial color="#c4a86c" metalness={0.25} roughness={0.65} />
+      </mesh>
+      {/* アーチ装飾 (台座上のリング) */}
+      <mesh position={[0, 2.75, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1.3, 0.08, 8, 20]} />
+        <meshStandardMaterial color="#d4af37" metalness={0.6} roughness={0.35} />
+      </mesh>
+
+      {/* ===== 中央柱 + 装飾頂部 ===== */}
+      <mesh position={[0, 3.6, 0]}>
+        <cylinderGeometry args={[0.22, 0.3, 2.0, 12]} />
+        <meshStandardMaterial color="#c4a86c" metalness={0.4} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 4.8, 0]}>
+        <sphereGeometry args={[0.4, 16, 16]} />
+        <meshStandardMaterial color="#d4af37" emissive="#ffd166" emissiveIntensity={0.6} metalness={0.7} roughness={0.25} toneMapped={false} />
+      </mesh>
+
+      {/* ===== 垂直水ジェット ===== */}
+      {/* メインジェット (中央) */}
+      <mesh position={[0, 6.5, 0]}>
+        <cylinderGeometry args={[0.04, 0.04, 5, 6]} />
+        <meshStandardMaterial color="#ddeeff" emissive="#bbddff" emissiveIntensity={2.5} transparent opacity={0.5} toneMapped={false} />
+      </mesh>
+      {/* サイドジェット (4本) */}
+      {[0, 1, 2, 3].map(i => {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        return (
+          <mesh key={`vj${i}`} position={[Math.cos(a) * 1.2, 5.5, Math.sin(a) * 1.2]}>
+            <cylinderGeometry args={[0.03, 0.03, 3.5, 6]} />
+            <meshStandardMaterial color="#ddeeff" emissive="#bbddff" emissiveIntensity={2} transparent opacity={0.4} toneMapped={false} />
+          </mesh>
+        );
+      })}
+
+      {/* ===== アーチ型水ジェット (放物線状に外へ) ===== */}
+      {Array.from({ length: 8 }).map((_, i) => {
+        const a = (i / 8) * Math.PI * 2;
+        return (
+          <mesh key={`arc${i}`} position={[Math.cos(a) * 3.2, 2.2, Math.sin(a) * 3.2]} rotation={[Math.sin(a) * 0.7, 0, -Math.cos(a) * 0.7]}>
+            <cylinderGeometry args={[0.025, 0.025, 3.5, 6]} />
+            <meshStandardMaterial color="#ddeeff" emissive="#ccddee" emissiveIntensity={2} transparent opacity={0.45} toneMapped={false} />
+          </mesh>
+        );
+      })}
+
+      {/* ===== ゴールデン照明 (暖色アップライト) ===== */}
+      <pointLight position={[0, 0.3, 0]} intensity={3.5} color="#ffaa44" distance={18} />
+      <pointLight position={[0, 3, 0]} intensity={2.5} color="#ff9922" distance={14} />
+      <pointLight position={[0, 5, 0]} intensity={1.5} color="#ffd166" distance={10} />
+      {[0, 1, 2, 3].map(i => {
+        const a = (i / 4) * Math.PI * 2;
+        return (
+          <pointLight key={`ul${i}`} position={[Math.cos(a) * 4, 0.2, Math.sin(a) * 4]} intensity={1.5} color="#ffcc66" distance={8} />
+        );
+      })}
+      {[0, 1, 2, 3].map(i => {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        return (
+          <pointLight key={`ul2${i}`} position={[Math.cos(a) * 2.5, 1.5, Math.sin(a) * 2.5]} intensity={1} color="#ff8833" distance={6} />
+        );
+      })}
+
+      {/* ===== 周辺の装飾 ===== */}
+      {/* 石柱ポール + ゴールドランプ */}
+      {[
+        [7, 7], [-7, 7], [7, -7], [-7, -7],
+        [9.5, 0], [-9.5, 0], [0, 9.5], [0, -9.5],
+      ].map(([px, pz], i) => (
+        <group key={`pole${i}`} position={[px, 0, pz]}>
+          <mesh position={[0, 1.5, 0]}>
+            <cylinderGeometry args={[0.08, 0.12, 3, 8]} />
+            <meshStandardMaterial color="#8b7050" metalness={0.35} roughness={0.55} />
+          </mesh>
+          <mesh position={[0, 3.1, 0]}>
+            <sphereGeometry args={[0.15, 8, 8]} />
+            <meshStandardMaterial color="#ffd166" emissive="#ffaa44" emissiveIntensity={2} toneMapped={false} />
+          </mesh>
+          <pointLight position={[0, 3.2, 0]} intensity={0.8} color="#ffaa44" distance={8} />
         </group>
       ))}
+
+      {/* 植栽 (低木) */}
+      {Array.from({ length: 10 }).map((_, i) => {
+        const a = (i / 10) * Math.PI * 2;
+        return (
+          <mesh key={`bush${i}`} position={[Math.cos(a) * 7.5, 0.5, Math.sin(a) * 7.5]}>
+            <sphereGeometry args={[0.55, 8, 8]} />
+            <meshStandardMaterial color="#2a6b35" roughness={0.85} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
