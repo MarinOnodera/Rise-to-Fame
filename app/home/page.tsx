@@ -38,17 +38,9 @@ const FALLBACK_AVATAR: UserAvatar = {
   },
   createdAt: new Date(0).toISOString(),
 };
-import {
-  isPortrait,
-  lockLandscape,
-  onOrientationChange,
-} from "@/lib/orientation";
-
 /**
  * ホーム画面 = 街の全画面 HUD。
- * - 基本は横向きで遊ぶ前提。ログイン直後に screen.orientation.lock で
- *   自動回転を試み、未対応環境 (iOS Safari 等) のみフォールバックで
- *   「タップして横画面にする」ボタンを出す。
+ * - 横・縦どちらでもプレイ可能。
  * - 背景は StreetScene をフルブリード、UIは画面内に収める。
  * - ナビは右上のメニューボタン1つに集約。
  * - デュアルCTAは文字なしのアイコンボタン (タップで各選択画面へ)。
@@ -66,7 +58,6 @@ export default function HomePage() {
   } = useGame();
   const [menuOpen, setMenuOpen] = useState(false);
   const [topOpen, setTopOpen] = useState(false);
-  const [portrait, setPortrait] = useState(false);
 
   useEffect(() => {
     if (!user) router.replace("/");
@@ -84,25 +75,6 @@ export default function HomePage() {
     deliverDailyMessages, tickIdolPosts,
     tickAdsRollover, tickAdEconomy,
   ]);
-
-  // 横画面ロックを試行。ユーザー操作が必要な環境のために、
-  // 初回 pointerdown でも再試行する (gesture scope 内だと通る)。
-  useEffect(() => {
-    if (!user) return;
-    void lockLandscape();
-    const evaluate = () => setPortrait(isPortrait());
-    evaluate();
-    const off = onOrientationChange(evaluate);
-    const gestureLock = () => {
-      void lockLandscape().finally(() => evaluate());
-      window.removeEventListener("pointerdown", gestureLock);
-    };
-    window.addEventListener("pointerdown", gestureLock, { once: true });
-    return () => {
-      off();
-      window.removeEventListener("pointerdown", gestureLock);
-    };
-  }, [user]);
 
   if (!user) return null;
 
@@ -161,7 +133,7 @@ export default function HomePage() {
         <div className="mx-auto w-[6px] h-4 bg-[#1a0826]" />
       </button>
 
-      {/* 右下: アイコンのみのデュアルCTA (横画面で親指が届きやすい位置) */}
+      {/* 右下: アイコンのみのデュアルCTA */}
       <div className="absolute bottom-0 right-0 z-20 pb-3 pr-3 sm:pb-4 sm:pr-4">
         <div className="flex items-end gap-2 sm:gap-3">
           <CtaIconButton
@@ -178,27 +150,6 @@ export default function HomePage() {
           />
         </div>
       </div>
-
-      {/* 縦画面フォールバック: タップで横画面にする */}
-      {portrait && (
-        <button
-          className="portrait-hint"
-          onClick={() => {
-            void lockLandscape().finally(() => setPortrait(isPortrait()));
-          }}
-        >
-          <div className="text-center">
-            <div className="text-6xl animate-pulse">📱↺</div>
-            <div className="mt-4 font-bold text-lg">横画面に切り替える</div>
-            <div className="text-xs opacity-70 mt-1">
-              タップで自動的に横向きに回転します
-            </div>
-            <div className="text-[10px] opacity-50 mt-3">
-              ※ iOS Safariでは端末の回転ロックを解除してください
-            </div>
-          </div>
-        </button>
-      )}
 
       {/* Overlays */}
       {!user.tutorialDone && <Tutorial onFinish={completeTutorial} />}
