@@ -682,10 +682,10 @@ function CentralPlaza() {
   });
 
   return (
-    <group position={[0, 0, 0]}>
+    <group position={[PLAZA_POS.x, 0, PLAZA_POS.z]}>
       {/* 広場の床 (石畳) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
-        <circleGeometry args={[12, 48]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <circleGeometry args={[PLAZA_POS.radius, 48]} />
         <meshStandardMaterial color="#3a2a18" emissive="#1a0e06" emissiveIntensity={0.2} roughness={0.85} />
       </mesh>
 
@@ -824,15 +824,37 @@ function CentralPlaza() {
       ))}
 
       {/* 植栽 (低木) */}
-      {Array.from({ length: 10 }).map((_, i) => {
-        const a = (i / 10) * Math.PI * 2;
+      {Array.from({ length: 12 }).map((_, i) => {
+        const a = (i / 12) * Math.PI * 2;
         return (
-          <mesh key={`bush${i}`} position={[Math.cos(a) * 7.5, 0.5, Math.sin(a) * 7.5]}>
-            <sphereGeometry args={[0.55, 8, 8]} />
+          <mesh key={`bush${i}`} position={[Math.cos(a) * 10, 0.5, Math.sin(a) * 10]}>
+            <sphereGeometry args={[0.7, 8, 8]} />
             <meshStandardMaterial color="#2a6b35" roughness={0.85} />
           </mesh>
         );
       })}
+
+      {/* ベンチ (4個、対角線上) */}
+      {[Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4].map((a, i) => (
+        <group key={`bench${i}`} position={[Math.cos(a) * 8, 0, Math.sin(a) * 8]} rotation={[0, -a + Math.PI / 2, 0]}>
+          <mesh position={[0, 0.35, 0]}>
+            <boxGeometry args={[1.8, 0.08, 0.5]} />
+            <meshStandardMaterial color="#6b4226" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 0.55, -0.22]}>
+            <boxGeometry args={[1.8, 0.5, 0.06]} />
+            <meshStandardMaterial color="#6b4226" roughness={0.8} />
+          </mesh>
+          <mesh position={[-0.75, 0.18, 0]}>
+            <boxGeometry args={[0.06, 0.36, 0.4]} />
+            <meshStandardMaterial color="#333" metalness={0.6} roughness={0.4} />
+          </mesh>
+          <mesh position={[0.75, 0.18, 0]}>
+            <boxGeometry args={[0.06, 0.36, 0.4]} />
+            <meshStandardMaterial color="#333" metalness={0.6} roughness={0.4} />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }
@@ -971,7 +993,7 @@ function DynamicSky() {
 
   return (
     <mesh>
-      <sphereGeometry args={[600, 32, 32]} />
+      <sphereGeometry args={[1100, 32, 32]} />
       <meshBasicMaterial ref={matRef} side={THREE.BackSide} />
     </mesh>
   );
@@ -1086,10 +1108,10 @@ function FlyingVehicle({
 function FlyingVehicles() {
   const vehicles = useMemo(
     () => [
-      { radius: 50, height: 35, speed: 0.15, phase: 0, color: "#ff3d8b" },
-      { radius: 65, height: 42, speed: -0.1, phase: Math.PI * 0.7, color: "#00e6ff" },
-      { radius: 40, height: 30, speed: 0.2, phase: Math.PI * 1.3, color: "#ffd166" },
-      { radius: 55, height: 38, speed: -0.12, phase: Math.PI * 0.3, color: "#7b2cff" },
+      { radius: 120, height: 45, speed: 0.15, phase: 0, color: "#ff3d8b" },
+      { radius: 150, height: 55, speed: -0.1, phase: Math.PI * 0.7, color: "#00e6ff" },
+      { radius: 100, height: 38, speed: 0.2, phase: Math.PI * 1.3, color: "#ffd166" },
+      { radius: 130, height: 48, speed: -0.12, phase: Math.PI * 0.3, color: "#7b2cff" },
     ],
     []
   );
@@ -1103,11 +1125,13 @@ function FlyingVehicles() {
 }
 
 // ===== 道路ネットワーク定数 =====
-const ROAD_XS = [-80, -40, 0, 40, 80];
-const ROAD_ZS = [-80, -40, 0, 40, 80];
+const ROAD_XS = [-200, -100, 0, 100, 200];
+const ROAD_ZS = [-200, -100, 0, 100, 200];
+
+const PLAZA_POS = { x: 50, z: 50, radius: 25 };
 
 function roadWidth(pos: number): number {
-  return pos === 0 ? 12 : 6;
+  return pos === 0 ? 14 : 8;
 }
 
 function isOnRoad(x: number, z: number): boolean {
@@ -1164,7 +1188,7 @@ function NPCCar({
 
   useFrame((state) => {
     if (!ref.current || route.length < 2) return;
-    const segTime = 40 / speed;
+    const segTime = 100 / speed;
     const totalTime = (route.length - 1) * segTime;
     const loopT = ((state.clock.elapsedTime % totalTime) + totalTime) % totalTime;
     const segIdx = Math.min(Math.floor(loopT / segTime), route.length - 2);
@@ -1259,8 +1283,8 @@ function NPCPedestrian({
         s.paused = false;
         const angle = s.rng() * Math.PI * 2;
         const dist = 10 + s.rng() * 40;
-        s.targetX = THREE.MathUtils.clamp(s.x + Math.cos(angle) * dist, -220, 220);
-        s.targetZ = THREE.MathUtils.clamp(s.z + Math.sin(angle) * dist, -220, 220);
+        s.targetX = THREE.MathUtils.clamp(s.x + Math.cos(angle) * dist, -450, 450);
+        s.targetZ = THREE.MathUtils.clamp(s.z + Math.sin(angle) * dist, -450, 450);
       }
     } else {
       const dx = s.targetX - s.x;
@@ -1273,8 +1297,8 @@ function NPCPedestrian({
         } else {
           const angle = s.rng() * Math.PI * 2;
           const d = 10 + s.rng() * 40;
-          s.targetX = THREE.MathUtils.clamp(s.x + Math.cos(angle) * d, -220, 220);
-          s.targetZ = THREE.MathUtils.clamp(s.z + Math.sin(angle) * d, -220, 220);
+          s.targetX = THREE.MathUtils.clamp(s.x + Math.cos(angle) * d, -450, 450);
+          s.targetZ = THREE.MathUtils.clamp(s.z + Math.sin(angle) * d, -450, 450);
         }
       } else {
         const speed = 1.5;
@@ -1305,8 +1329,8 @@ function NPCPedestrians() {
   const peds = useMemo(() => {
     const rng = mulberry32(7777);
     return Array.from({ length: 20 }, (_, i) => ({
-      startX: (rng() - 0.5) * 300,
-      startZ: (rng() - 0.5) * 300,
+      startX: (rng() - 0.5) * 700,
+      startZ: (rng() - 0.5) * 700,
       skinHue: Math.floor(rng() * 40 + 15),
       outfitHue: Math.floor(rng() * 360),
       seed: 8000 + i,
@@ -1334,8 +1358,8 @@ function WaterBody() {
 
   return (
     <group>
-      <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.3, 200]}>
-        <planeGeometry args={[600, 120]} />
+      <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.3, 420]}>
+        <planeGeometry args={[1400, 250]} />
         <meshStandardMaterial
           color={waterCol}
           emissive={waterCol}
@@ -1347,8 +1371,8 @@ function WaterBody() {
         />
       </mesh>
       {/* 岸壁 */}
-      <mesh position={[0, -0.15, 140]}>
-        <boxGeometry args={[600, 0.6, 0.5]} />
+      <mesh position={[0, -0.15, 295]}>
+        <boxGeometry args={[1400, 0.6, 0.5]} />
         <meshStandardMaterial color="#2a1a3a" />
       </mesh>
     </group>
@@ -1357,9 +1381,9 @@ function WaterBody() {
 
 // ===== モノレール =====
 function MonorailTrack() {
-  const RX = 160;
-  const RZ = 140;
-  const H = 16;
+  const RX = 350;
+  const RZ = 300;
+  const H = 20;
   const pillars = useMemo(() => {
     const out: { x: number; z: number }[] = [];
     for (let i = 0; i < 24; i++) {
@@ -1389,9 +1413,9 @@ function MonorailTrack() {
 
 function MonorailTrain() {
   const ref = useRef<THREE.Group>(null);
-  const RX = 160;
-  const RZ = 140;
-  const H = 16;
+  const RX = 350;
+  const RZ = 300;
+  const H = 20;
 
   useFrame((state) => {
     if (!ref.current) return;
@@ -1477,7 +1501,7 @@ function overlapsAny(x: number, z: number, w: number, d: number, list: BuildingB
   for (const b of list) {
     if (Math.abs(x - b.x) < (w + b.w) / 2 + 12 && Math.abs(z - b.z) < (d + b.d) / 2 + 12) return true;
   }
-  if (Math.hypot(x, z) < 18) return true;
+  if (Math.hypot(x - PLAZA_POS.x, z - PLAZA_POS.z) < PLAZA_POS.radius + 5) return true;
   return false;
 }
 
@@ -1511,14 +1535,14 @@ export function makeBuildings(): BuildingBox[] {
   ];
   let labelIdx = 0;
 
-  for (let gx = -200; gx <= 200; gx += 20) {
-    for (let gz = -180; gz <= 120; gz += 20) {
-      const cx = gx + (rng() - 0.5) * 8;
-      const cz = gz + (rng() - 0.5) * 8;
+  for (let gx = -420; gx <= 420; gx += 25) {
+    for (let gz = -420; gz <= 280; gz += 25) {
+      const cx = gx + (rng() - 0.5) * 10;
+      const cz = gz + (rng() - 0.5) * 10;
       if (isOnRoad(cx, cz)) continue;
-      if (Math.hypot(cx, cz) < 18) continue;
-      if (cz > 130) continue;
-      if (Math.hypot(cx - LUNA_DOME.x, cz - LUNA_DOME.z) < LUNA_DOME.radius + 8) continue;
+      if (Math.hypot(cx - PLAZA_POS.x, cz - PLAZA_POS.z) < PLAZA_POS.radius + 8) continue;
+      if (cz > 280) continue;
+      if (Math.hypot(cx - LUNA_DOME.x, cz - LUNA_DOME.z) < LUNA_DOME.radius + 15) continue;
       if (rng() < 0.3) continue;
 
       const hRoll = rng();
@@ -1557,9 +1581,9 @@ function makeSkyline(): BuildingBox[] {
   const out: BuildingBox[] = [];
   const rng = mulberry32(1234);
   const hues = [260, 280, 300, 320, 340, 200, 220, 180, 40, 30];
-  for (let i = 0; i < 180; i++) {
+  for (let i = 0; i < 220; i++) {
     const angle = rng() * Math.PI * 2;
-    const dist = 300 + rng() * 200;
+    const dist = 550 + rng() * 350;
     const x = Math.cos(angle) * dist;
     const z = Math.sin(angle) * dist;
     const scale = 1.2 + rng() * 0.3;
@@ -1579,8 +1603,8 @@ function makeSkyline(): BuildingBox[] {
 // 中に入ろうとしたプレイヤーは、このドア帯 (doorX ± doorW/2) だけが通過可能。
 // プレイヤーが開口を抜けて内側に立つと「入場トリガー」が発火し /gallery へ遷移。
 export const PHOTO_HALL = {
-  x: -14,    // 左側の街区
-  z: -12,
+  x: -50,
+  z: -50,
   w: 9,
   d: 6,
   h: 7,
@@ -1590,12 +1614,12 @@ export const PHOTO_HALL = {
 };
 
 export const LUNA_DOME = {
-  x: 60,
-  z: -60,
-  radius: 28,
-  domeH: 22,
-  baseH: 6,
-  doorW: 5,
+  x: 350,
+  z: -300,
+  radius: 35,
+  domeH: 26,
+  baseH: 8,
+  doorW: 6,
 };
 
 // ===== LUNA DOME (大規模コンサート会場) =====
@@ -1775,19 +1799,19 @@ function RoadNetwork() {
         return (
           <group key={`vr${rx}`}>
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.01, 0]} receiveShadow>
-              <planeGeometry args={[w, 600]} />
+              <planeGeometry args={[w, 1200]} />
               <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
             </mesh>
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx + w / 2 + 1, 0.02, 0]}>
-              <planeGeometry args={[2, 600]} />
+              <planeGeometry args={[2, 1200]} />
               <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
             </mesh>
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx - w / 2 - 1, 0.02, 0]}>
-              <planeGeometry args={[2, 600]} />
+              <planeGeometry args={[2, 1200]} />
               <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
             </mesh>
-            {rx === 0 && Array.from({ length: 30 }).map((_, i) => (
-              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.02, -145 + i * 10]}>
+            {rx === 0 && Array.from({ length: 60 }).map((_, i) => (
+              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.02, -295 + i * 10]}>
                 <planeGeometry args={[0.22, 2.4]} />
                 <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
               </mesh>
@@ -1800,11 +1824,11 @@ function RoadNetwork() {
         return (
           <group key={`hr${rz}`}>
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, rz]} receiveShadow>
-              <planeGeometry args={[600, w]} />
+              <planeGeometry args={[1200, w]} />
               <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
             </mesh>
-            {rz === 0 && Array.from({ length: 30 }).map((_, i) => (
-              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[-145 + i * 10, 0.02, rz]}>
+            {rz === 0 && Array.from({ length: 60 }).map((_, i) => (
+              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[-295 + i * 10, 0.02, rz]}>
                 <planeGeometry args={[2.4, 0.22]} />
                 <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
               </mesh>
@@ -1825,18 +1849,18 @@ function City() {
     const rng = mulberry32(555);
     const out: { x: number; z: number; s: number }[] = [];
     for (const rx of ROAD_XS) {
-      for (let z = -200; z <= 120; z += 20) {
+      for (let z = -420; z <= 280; z += 25) {
         const w = roadWidth(rx);
-        out.push({ x: rx + w / 2 + 2.5, z: z + rng() * 6, s: 1.2 + rng() * 0.3 });
-        out.push({ x: rx - w / 2 - 2.5, z: z + rng() * 6, s: 1.2 + rng() * 0.3 });
+        out.push({ x: rx + w / 2 + 3, z: z + rng() * 8, s: 1.3 + rng() * 0.3 });
+        out.push({ x: rx - w / 2 - 3, z: z + rng() * 8, s: 1.3 + rng() * 0.3 });
       }
     }
-    for (let x = -200; x <= 200; x += 20) {
-      out.push({ x: x + rng() * 6, z: 128 + rng() * 4, s: 1.4 + rng() * 0.4 });
+    for (let x = -420; x <= 420; x += 25) {
+      out.push({ x: x + rng() * 6, z: 288 + rng() * 5, s: 1.5 + rng() * 0.4 });
     }
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      out.push({ x: Math.cos(a) * 14, z: Math.sin(a) * 14, s: 1.0 + rng() * 0.2 });
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      out.push({ x: PLAZA_POS.x + Math.cos(a) * 18, z: PLAZA_POS.z + Math.sin(a) * 18, s: 1.2 + rng() * 0.2 });
     }
     return out;
   }, []);
@@ -1845,7 +1869,7 @@ function City() {
     const out: { x: number; z: number }[] = [];
     for (const rx of ROAD_XS) {
       const w = roadWidth(rx);
-      for (let z = -180; z <= 120; z += 30) {
+      for (let z = -400; z <= 280; z += 40) {
         out.push({ x: rx + w / 2 + 1.5, z });
         out.push({ x: rx - w / 2 - 1.5, z });
       }
@@ -1856,17 +1880,17 @@ function City() {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, 0]}>
-        <planeGeometry args={[700, 700]} />
+        <planeGeometry args={[1400, 1400]} />
         <meshStandardMaterial color="#120a22" />
       </mesh>
 
       <RoadNetwork />
       <CentralPlaza />
 
-      <AreaSign x={55}  z={-55} text="🎤 엔터테인먼트" rotY={0} />
-      <AreaSign x={55}  z={55}  text="🛍️ 쇼핑거리" rotY={0} />
-      <AreaSign x={-55} z={-55} text="🏢 에이전시" rotY={0} />
-      <AreaSign x={-55} z={55}  text="🏠 주거지역" rotY={0} />
+      <AreaSign x={150}  z={-150} text="🎤 엔터테인먼트" rotY={0} />
+      <AreaSign x={150}  z={150}  text="🛍️ 쇼핑거리" rotY={0} />
+      <AreaSign x={-150} z={-150} text="🏢 에이전시" rotY={0} />
+      <AreaSign x={-150} z={150}  text="🏠 주거지역" rotY={0} />
 
       {buildings.map((b, i) => (
         <Building key={`fg${i}`} {...b} />
@@ -1885,14 +1909,14 @@ function City() {
         <Palm key={i} x={p.x} z={p.z} scale={p.s} />
       ))}
 
-      <Billboard x={0} y={35} z={-100} text="MarinLuna" subText="Rise to Fame" colorA="#ff3d8b" colorB="#7b2cff" width={30} height={8} />
-      <HologramFigure x={0} y={45} z={-100} />
-      <Billboard x={0} y={28} z={110} text="📍 서울" subText="NEON PARADISE" colorA="#00e6ff" colorB="#7b2cff" rotationY={Math.PI} width={26} height={6} />
-      <HologramFigure x={0} y={36} z={110} />
-      <Billboard x={-120} y={30} z={-30} text="✨ DREAM STAGE" subText="꿈의 무대" colorA="#ffd166" colorB="#ff3d8b" rotationY={Math.PI / 2} width={22} height={6} />
-      <Billboard x={120} y={28} z={30} text="🎤 데뷔" subText="THE WORLD IS WATCHING" colorA="#7b2cff" colorB="#00e6ff" rotationY={-Math.PI / 2} width={22} height={6} />
-      <Billboard x={-100} y={22} z={60} text="🌴 파라다이스" subText="TROPICAL CITY" colorA="#44ddaa" colorB="#00bbff" rotationY={Math.PI / 3} width={18} height={5} />
-      <Billboard x={100} y={24} z={-60} text="🎵 K-POP" subText="LIVE TONIGHT" colorA="#ff66aa" colorB="#ffaa44" rotationY={-Math.PI / 3} width={18} height={5} />
+      <Billboard x={0} y={40} z={-250} text="MarinLuna" subText="Rise to Fame" colorA="#ff3d8b" colorB="#7b2cff" width={30} height={8} />
+      <HologramFigure x={0} y={50} z={-250} />
+      <Billboard x={0} y={35} z={250} text="📍 서울" subText="NEON PARADISE" colorA="#00e6ff" colorB="#7b2cff" rotationY={Math.PI} width={26} height={6} />
+      <HologramFigure x={0} y={43} z={250} />
+      <Billboard x={-280} y={35} z={-80} text="✨ DREAM STAGE" subText="꿈의 무대" colorA="#ffd166" colorB="#ff3d8b" rotationY={Math.PI / 2} width={24} height={6} />
+      <Billboard x={280} y={32} z={80} text="🎤 데뷔" subText="THE WORLD IS WATCHING" colorA="#7b2cff" colorB="#00e6ff" rotationY={-Math.PI / 2} width={24} height={6} />
+      <Billboard x={-240} y={28} z={160} text="🌴 파라다이스" subText="TROPICAL CITY" colorA="#44ddaa" colorB="#00bbff" rotationY={Math.PI / 3} width={20} height={5} />
+      <Billboard x={240} y={30} z={-160} text="🎵 K-POP" subText="LIVE TONIGHT" colorA="#ff66aa" colorB="#ffaa44" rotationY={-Math.PI / 3} width={20} height={5} />
 
       <CityAdBoards />
       <NPCCars />
@@ -2135,7 +2159,7 @@ function Player({
   const groupRef = useRef<THREE.Group>(null);
   const yawRef = useRef(0); // アバターの向き
   const walkRef = useRef(0); // アニメ位相
-  const posRef = useRef(new THREE.Vector3(0, 0, 4));
+  const posRef = useRef(new THREE.Vector3(PLAZA_POS.x, 0, PLAZA_POS.z + 12));
   const insideHallRef = useRef(false); // エッジトリガー用
   const { camera } = useThree();
   const buildings = useMemo(() => makeBuildings(), []);
@@ -2151,7 +2175,7 @@ function Player({
     // right = cross(forward, up) を Three.js (y-up 右手系) で展開すると
     // rightX = -cos(yaw), rightZ = sin(yaw) になる。
     // ここを誤ると左右が逆になるので要注意。
-    const speed = 8;
+    const speed = 14;
     const mag = Math.hypot(jx, jy);
     const forwardX = Math.sin(camYaw);
     const forwardZ = Math.cos(camYaw);
@@ -2167,8 +2191,8 @@ function Player({
     }
 
     // スライド衝突: X/Z 軸を独立に試して、壁にぶつかった軸だけ戻す
-    const nextX = THREE.MathUtils.clamp(posRef.current.x + dx, -240, 240);
-    const nextZ = THREE.MathUtils.clamp(posRef.current.z + dz, -240, 240);
+    const nextX = THREE.MathUtils.clamp(posRef.current.x + dx, -480, 480);
+    const nextZ = THREE.MathUtils.clamp(posRef.current.z + dz, -480, 480);
     if (!collidesBuildings(nextX, posRef.current.z, buildings)) {
       posRef.current.x = nextX;
     }
@@ -2256,14 +2280,14 @@ function DynamicLighting() {
       ambCol = lerpHex("#6050a0", "#8899bb", t);
       dirCol = lerpHex("#ff8844", "#ffeedd", t);
       const fogCol = new THREE.Color(lerpHex("#1a0a2e", "#aabbcc", t * 0.5));
-      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.004 - t * 0.001);
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.002 - t * 0.0005);
     } else if (phase === "day") {
       ambI = 0.6;
       dirI = 1.1;
       neonI = 0.15;
       ambCol = "#8899bb";
       dirCol = "#ffeedd";
-      scene.fog = new THREE.FogExp2(0x8899bb, 0.0025);
+      scene.fog = new THREE.FogExp2(0x8899bb, 0.0012);
     } else {
       ambI = 0.6 - t * 0.45;
       dirI = 1.1 - t * 0.9;
@@ -2271,7 +2295,7 @@ function DynamicLighting() {
       ambCol = lerpHex("#8899bb", "#2a1848", t);
       dirCol = lerpHex("#ffeedd", "#443366", t);
       const fogCol = new THREE.Color(lerpHex("#8899bb", "#0e0620", t));
-      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.003 + t * 0.002);
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.0015 + t * 0.001);
     }
 
     if (ambRef.current) { ambRef.current.intensity = ambI; ambRef.current.color.set(ambCol); }
@@ -2307,7 +2331,7 @@ function SceneInner({
 }) {
   const { scene } = useThree();
   useEffect(() => {
-    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.004);
+    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.002);
     scene.background = null;
   }, [scene]);
 
@@ -2380,7 +2404,7 @@ export function City3D({ avatar }: { avatar: UserAvatar }) {
     <div className="absolute inset-0 z-0 select-none">
       <Canvas
         shadows
-        camera={{ position: [0, 8, 14], fov: 62, near: 0.1, far: 1200 }}
+        camera={{ position: [0, 8, 14], fov: 62, near: 0.1, far: 2500 }}
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
