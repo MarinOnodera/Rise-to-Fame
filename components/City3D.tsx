@@ -512,14 +512,9 @@ function Building({
   d,
   h,
   hue,
-}: {
-  x: number;
-  z: number;
-  w: number;
-  d: number;
-  h: number;
-  hue: number;
-}) {
+  label,
+  type,
+}: BuildingBox) {
   const base = useMemo(
     () => new THREE.Color(`hsl(${hue}, 35%, 14%)`),
     [hue]
@@ -528,13 +523,50 @@ function Building({
     () => new THREE.Color(`hsl(${(hue + 40) % 360}, 90%, 60%)`),
     [hue]
   );
+
+  // 看板テクスチャ (label がある建物のみ)
+  const signTex = useMemo(() => {
+    if (!label || typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 128;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    // 背景: ビルの accent 色に合わせたグラデーション
+    const g = ctx.createLinearGradient(0, 0, 512, 0);
+    const acHex = `hsl(${(hue + 40) % 360}, 90%, 25%)`;
+    const acHex2 = `hsl(${(hue + 80) % 360}, 80%, 15%)`;
+    g.addColorStop(0, acHex);
+    g.addColorStop(1, acHex2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 512, 128);
+    // 枠線 (ネオン風)
+    ctx.strokeStyle = `hsl(${(hue + 40) % 360}, 100%, 70%)`;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(4, 4, 504, 120);
+    // テキスト
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 48px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = `hsl(${(hue + 40) % 360}, 100%, 60%)`;
+    ctx.shadowBlur = 12;
+    ctx.fillText(label, 256, 64);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [label, hue]);
+
+  const signW = Math.min(w * 0.95, 6);
+  const signH = signW * 0.25;
+
   return (
     <group position={[x, h / 2, z]}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
         <meshStandardMaterial color={base} />
       </mesh>
-      {/* 上部ネオン帯 */}
+      {/* 上部ネオン帯 (前面) */}
       <mesh position={[0, h / 2 - 0.2, d / 2 + 0.02]}>
         <planeGeometry args={[w * 0.85, 0.3]} />
         <meshStandardMaterial
@@ -544,6 +576,7 @@ function Building({
           toneMapped={false}
         />
       </mesh>
+      {/* 上部ネオン帯 (側面) */}
       <mesh
         position={[w / 2 + 0.02, 0, 0]}
         rotation={[0, Math.PI / 2, 0]}
@@ -556,8 +589,71 @@ function Building({
           toneMapped={false}
         />
       </mesh>
-      {/* 窓 (ランダムグリッドのエミッシブ点) */}
+      {/* 窓 */}
       <Windows w={w} h={h} d={d} hue={hue} />
+      {/* 看板 (ラベル付きビルのみ) */}
+      {signTex && (
+        <mesh position={[0, h / 2 * 0.35, d / 2 + 0.05]}>
+          <planeGeometry args={[signW, signH]} />
+          <meshStandardMaterial
+            map={signTex}
+            emissive="#ffffff"
+            emissiveMap={signTex}
+            emissiveIntensity={1.2}
+            toneMapped={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+      {/* コンサート会場は入口を強調 */}
+      {type === "concert" && (
+        <>
+          {/* アーチ入口 */}
+          <mesh position={[0, -h / 2 + 2.5, d / 2 + 0.06]}>
+            <planeGeometry args={[3.5, 5]} />
+            <meshStandardMaterial
+              color={accent}
+              emissive={accent}
+              emissiveIntensity={0.8}
+              transparent
+              opacity={0.3}
+              toneMapped={false}
+            />
+          </mesh>
+          {/* 屋上のドーム */}
+          <mesh position={[0, h / 2 + 1.2, 0]}>
+            <sphereGeometry args={[3.5, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
+            <meshStandardMaterial
+              color={base}
+              emissive={accent}
+              emissiveIntensity={0.4}
+              toneMapped={false}
+            />
+          </mesh>
+          {/* スポットライト (天井から2本) */}
+          <pointLight
+            position={[-2, h / 2 + 3, 0]}
+            intensity={2}
+            color={accent}
+            distance={18}
+          />
+          <pointLight
+            position={[2, h / 2 + 3, 0]}
+            intensity={2}
+            color="#ffd166"
+            distance={18}
+          />
+        </>
+      )}
+      {/* カフェは1F入口にウォームライト */}
+      {type === "cafe" && (
+        <pointLight
+          position={[0, -h / 2 + 1.5, d / 2 + 1]}
+          intensity={1.2}
+          color="#ffd166"
+          distance={8}
+        />
+      )}
     </group>
   );
 }
@@ -610,6 +706,143 @@ function Windows({
   );
 }
 
+// ===== 中央広場 (噴水 + ステージ) =====
+function CentralPlaza() {
+  const waterCol = useMemo(() => new THREE.Color("#00e6ff"), []);
+  return (
+    <group position={[0, 0, 0]}>
+      {/* 広場の床 (円形タイル) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
+        <circleGeometry args={[8, 48]} />
+        <meshStandardMaterial
+          color="#1a0a30"
+          emissive="#2a1050"
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+      {/* 噴水ベース */}
+      <mesh position={[0, 0.4, 0]}>
+        <cylinderGeometry args={[2.5, 3, 0.8, 32]} />
+        <meshStandardMaterial color="#2a1050" />
+      </mesh>
+      {/* 水面 */}
+      <mesh position={[0, 0.82, 0]}>
+        <cylinderGeometry args={[2.3, 2.3, 0.05, 32]} />
+        <meshStandardMaterial
+          color={waterCol}
+          emissive={waterCol}
+          emissiveIntensity={0.6}
+          transparent
+          opacity={0.7}
+          toneMapped={false}
+        />
+      </mesh>
+      {/* 中央柱 */}
+      <mesh position={[0, 2.0, 0]}>
+        <cylinderGeometry args={[0.2, 0.3, 2.4, 12]} />
+        <meshStandardMaterial
+          color="#d4af37"
+          emissive="#ffd166"
+          emissiveIntensity={0.5}
+          metalness={0.8}
+          roughness={0.3}
+        />
+      </mesh>
+      {/* 上部の星オブジェ */}
+      <mesh position={[0, 3.5, 0]} rotation={[0, Math.PI / 4, 0]}>
+        <octahedronGeometry args={[0.5]} />
+        <meshStandardMaterial
+          color="#ffd166"
+          emissive="#ffd166"
+          emissiveIntensity={2}
+          toneMapped={false}
+        />
+      </mesh>
+      {/* 噴水ライト */}
+      <pointLight
+        position={[0, 2, 0]}
+        intensity={2.5}
+        color="#00e6ff"
+        distance={15}
+      />
+      {/* 広場四隅のネオンポール */}
+      {[
+        [5.5, 5.5],
+        [-5.5, 5.5],
+        [5.5, -5.5],
+        [-5.5, -5.5],
+      ].map(([px, pz], i) => (
+        <group key={i} position={[px, 0, pz]}>
+          <mesh position={[0, 1.5, 0]}>
+            <cylinderGeometry args={[0.06, 0.06, 3, 8]} />
+            <meshStandardMaterial color="#1a0a30" />
+          </mesh>
+          <pointLight
+            position={[0, 3, 0]}
+            intensity={0.9}
+            color={i % 2 === 0 ? "#ff3d8b" : "#7b2cff"}
+            distance={10}
+          />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+// ===== エリア名の地面標識 =====
+function AreaSign({
+  x,
+  z,
+  text,
+  rotY = 0,
+}: {
+  x: number;
+  z: number;
+  text: string;
+  rotY?: number;
+}) {
+  const tex = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 128;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "rgba(20, 8, 40, 0.85)";
+    ctx.fillRect(0, 0, 512, 128);
+    ctx.strokeStyle = "#7b2cff";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(8, 8, 496, 112);
+    ctx.fillStyle = "#ffd166";
+    ctx.font = "bold 52px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "#ffd166";
+    ctx.shadowBlur = 8;
+    ctx.fillText(text, 256, 64);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [text]);
+
+  return tex ? (
+    <mesh
+      rotation={[-Math.PI / 2, 0, rotY]}
+      position={[x, 0.03, z]}
+    >
+      <planeGeometry args={[5, 1.3]} />
+      <meshStandardMaterial
+        map={tex}
+        emissive="#ffffff"
+        emissiveMap={tex}
+        emissiveIntensity={0.8}
+        toneMapped={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  ) : null;
+}
+
 // ===== ヤシの木 =====
 function Palm({ x, z, scale = 1 }: { x: number; z: number; scale?: number }) {
   const leaves = [0, 1, 2, 3, 4, 5];
@@ -648,27 +881,94 @@ export interface BuildingBox {
   d: number;
   h: number;
   hue: number;
+  label?: string; // 看板テキスト (CanvasTexture で前面に焼き込む)
+  type?: "normal" | "concert" | "cafe" | "shop" | "agency" | "residence" | "station";
 }
 
+/**
+ * MarinLuna Seoul エリアマップ構造。
+ *
+ *   NW: 事務所エリア          NE: エンタメ通り
+ *           道路 (x=0, 南北)
+ *   SW: 住宅 & 写真館         SE: ショッピング & 練習生通り
+ *
+ * 中央に広場 (噴水 + ステージ)。
+ * 周辺は遠景スカイラインとして大型ビル群を配置。
+ */
 export function makeBuildings(): BuildingBox[] {
-  const rng = mulberry32(7);
   const out: BuildingBox[] = [];
-  for (let i = 0; i < 80; i++) {
+
+  // ===== NE: エンタメ通り (Entertainment District) =====
+  out.push(
+    // コンサート会場 (最大の建物)
+    { x: 20, z: -24, w: 14, d: 12, h: 13, hue: 280, label: "🎤 CONCERT HALL", type: "concert" },
+    // ライブハウス
+    { x: 30, z: -12, w: 6, d: 5, h: 9, hue: 330, label: "🎵 LIVE HOUSE" },
+    // 放送局
+    { x: 32, z: -24, w: 5, d: 5, h: 18, hue: 260, label: "📺 MBC STUDIO" },
+    // レコーディングスタジオ
+    { x: 28, z: -5, w: 5, d: 4, h: 8, hue: 290, label: "🎧 REC STUDIO" },
+  );
+
+  // ===== SE: ショッピング & 練習生通り =====
+  out.push(
+    // カフェ
+    { x: 15, z: 5, w: 6, d: 5, h: 7, hue: 340, label: "☕ CLOUD NINE", type: "cafe" },
+    // アイドルショップ
+    { x: 24, z: 3, w: 5, d: 5, h: 9, hue: 40, label: "🛍️ IDOL SHOP", type: "shop" },
+    // レストラン
+    { x: 18, z: 14, w: 7, d: 5, h: 6, hue: 15, label: "🍜 HOT POT 24" },
+    // テックストア
+    { x: 28, z: 10, w: 5, d: 4, h: 12, hue: 200, label: "📱 NEOFOLD" },
+    // ドリンクバー
+    { x: 22, z: 20, w: 5, d: 4, h: 6, hue: 180, label: "🧋 PICO SODA" },
+    // オーディション会場
+    { x: 18, z: 28, w: 8, d: 6, h: 9, hue: 270, label: "🎭 AUDITION HALL" },
+    // 練習場
+    { x: 30, z: 26, w: 6, d: 5, h: 10, hue: 250, label: "💪 TRAINING CTR" },
+  );
+
+  // ===== NW: 事務所エリア (Agency District) =====
+  out.push(
+    // エージェンシータワー
+    { x: -20, z: -25, w: 7, d: 6, h: 22, hue: 270, label: "🏢 AGENCY TOWER", type: "agency" },
+    // ファッションブランド本社
+    { x: -28, z: -18, w: 6, d: 5, h: 14, hue: 45, label: "👗 ATELIER SEOUL", type: "agency" },
+    // マネジメント事務所
+    { x: -20, z: -15, w: 5, d: 5, h: 12, hue: 230, label: "📊 MANAGEMENT" },
+    // MarinLuna 本部 (ゲーム運営)
+    { x: -28, z: -28, w: 8, d: 6, h: 16, hue: 310, label: "✨ MarinLuna HQ" },
+  );
+
+  // ===== SW: 住宅 & レジャー =====
+  // (Photo Hall は PHOTO_HALL 定数で別管理: x=-14, z=-12)
+  out.push(
+    { x: -20, z: 6, w: 6, d: 5, h: 7, hue: 320, label: "🏠 RESIDENCE", type: "residence" },
+    { x: -28, z: 10, w: 5, d: 5, h: 6, hue: 300, label: "🏠 APARTMENT", type: "residence" },
+    { x: -22, z: 18, w: 6, d: 5, h: 5, hue: 30, label: "🐱 CAT CAFÉ", type: "cafe" },
+    { x: -16, z: 26, w: 5, d: 4, h: 7, hue: 350, label: "💈 BEAUTY SALON" },
+    { x: -26, z: 24, w: 5, d: 5, h: 8, hue: 210, label: "🏋️ FITNESS GYM" },
+  );
+
+  // ===== 遠景スカイライン (各方角に大型ビルを配置) =====
+  const rng = mulberry32(42);
+  for (let i = 0; i < 50; i++) {
     const angle = rng() * Math.PI * 2;
-    const dist = 10 + rng() * 55;
-    const x = Math.cos(angle) * dist;
-    const z = Math.sin(angle) * dist;
-    // 道路 (中央 ±3.5) を避ける
-    if (Math.abs(x) < 4) continue;
+    const dist = 38 + rng() * 30;
+    const bx = Math.cos(angle) * dist;
+    const bz = Math.sin(angle) * dist;
+    // 道路帯を避ける
+    if (Math.abs(bx) < 6) continue;
     out.push({
-      x,
-      z,
-      w: 3 + rng() * 5,
-      d: 3 + rng() * 5,
-      h: 6 + rng() * 26,
-      hue: 250 + (rng() - 0.5) * 110,
+      x: bx,
+      z: bz,
+      w: 4 + rng() * 6,
+      d: 4 + rng() * 6,
+      h: 10 + rng() * 30,
+      hue: 230 + (rng() - 0.5) * 120,
     });
   }
+
   return out;
 }
 
@@ -739,7 +1039,16 @@ function City() {
           />
         </mesh>
       ))}
-      {/* ビル群 */}
+      {/* === 中央広場 (Central Plaza) === */}
+      <CentralPlaza />
+
+      {/* === エリア名の地面標識 === */}
+      <AreaSign x={22}  z={-18} text="🎤 ENTERTAINMENT" rotY={0} />
+      <AreaSign x={22}  z={10}  text="🛍️ SHOPPING" rotY={0} />
+      <AreaSign x={-22} z={-20} text="🏢 AGENCY" rotY={0} />
+      <AreaSign x={-22} z={12}  text="🏠 RESIDENTIAL" rotY={0} />
+
+      {/* === ビル群 (エリア構造 + 遠景スカイライン) === */}
       {buildings.map((b, i) => (
         <Building key={i} {...b} />
       ))}
@@ -784,18 +1093,29 @@ function CityAdBoards() {
   const ads = useGame((s) => s.ads);
   const groups = useGame((s) => s.groups);
 
-  // billboard 枠を最大 6 枚まで街中に並べる。
+  // 広告枠をエリアのビル壁面に配置する。
+  // 固定スロット位置を用意し、ads から順に割り当てる。
+  const SLOTS: { px: number; py: number; pz: number; rotY: number }[] = [
+    // エンタメ通り北側 (コンサート会場横)
+    { px: 12, py: 10, pz: -24, rotY: Math.PI / 2 },
+    // 事務所エリア (Agency Tower 横)
+    { px: -12, py: 12, pz: -25, rotY: -Math.PI / 2 },
+    // ショッピング通り (道路沿い)
+    { px: 8, py: 8, pz: 5, rotY: Math.PI / 2 },
+    // 住宅エリア側
+    { px: -10, py: 7, pz: 10, rotY: -Math.PI / 2 },
+    // 練習生通り
+    { px: 12, py: 8, pz: 22, rotY: Math.PI / 2 },
+    // MarinLuna HQ 近く
+    { px: -18, py: 10, pz: -32, rotY: 0 },
+  ];
+
   const items = useMemo(() => {
-    const billboards = ads.filter((a) => a.placement === "billboard").slice(0, 6);
-    return billboards.map((ad, i) => {
-      const angle = (i / Math.max(1, billboards.length)) * Math.PI * 2;
-      const r = 22;
-      const px = Math.cos(angle) * r;
-      const pz = Math.sin(angle) * r;
-      // ビル群の隙間を埋めるので、ビルの肩高 8m あたり
-      const py = 9 + (i % 2) * 1.4;
-      return { ad, px, pz, py, rotY: -angle + Math.PI / 2 };
-    });
+    const billboards = ads.filter((a) => a.placement === "billboard").slice(0, SLOTS.length);
+    return billboards.map((ad, i) => ({
+      ad,
+      ...SLOTS[i % SLOTS.length],
+    }));
   }, [ads]);
 
   return (
