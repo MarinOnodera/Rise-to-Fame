@@ -369,13 +369,13 @@ export type AvatarPose =
 // writeupModeとして "ai" (写真からClaudeが生成) / "manual" (パーツ選択) の2通り。
 export interface UserAvatar {
   id: string;
-  source: "ai" | "manual";
-  // 色相0..360 (ルック調整用)。任意。
+  source: "ai" | "manual" | "preset";
+  presetId?: string;
   skinHue: number;
   hairHue: number;
   eyeHue: number;
   lipHue: number;
-  outfitHueA: number; // グラデ用2色
+  outfitHueA: number;
   outfitHueB: number;
   parts: {
     hair: AvatarHair;
@@ -385,7 +385,6 @@ export interface UserAvatar {
     background: AvatarBackground;
     pose: AvatarPose;
   };
-  // AI 生成時、Claude が推測した印象メモ (UI のコメント表示用)。
   vibe?: string;
   createdAt: string;
 }
