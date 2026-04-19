@@ -536,39 +536,57 @@ function Building({
     return t;
   }, [label, hue]);
 
+  const winTex = useMemo(() => {
+    if (skyline || typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 128;
+    c.height = 256;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = `hsl(${hue}, 45%, 8%)`;
+    ctx.fillRect(0, 0, 128, 256);
+    const rng = mulberry32(Math.floor(w * 1000 + h * 100 + d * 10));
+    const cols = Math.max(2, Math.floor(w / 1.5));
+    const rows = Math.max(3, Math.floor(h / 3));
+    const cw = 128 / cols;
+    const rh = 256 / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let cc = 0; cc < cols; cc++) {
+        if (rng() > 0.35) {
+          const lum = 40 + Math.floor(rng() * 30);
+          ctx.fillStyle = `hsl(${(hue + 200) % 360}, 80%, ${lum}%)`;
+        } else {
+          ctx.fillStyle = `hsl(${hue}, 20%, 5%)`;
+        }
+        ctx.fillRect(cc * cw + 2, r * rh + 2, cw - 4, rh - 4);
+      }
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [w, h, d, hue, skyline]);
+
   const signW = Math.min(w * 0.95, 6);
   const signH = signW * 0.25;
 
   return (
     <group position={[x, h / 2, z]}>
-      {/* ガラス風ボディ */}
-      <mesh castShadow receiveShadow>
+      <mesh castShadow={!skyline} receiveShadow={!skyline}>
         <boxGeometry args={[w, h, d]} />
         <meshStandardMaterial color={glass} metalness={0.7} roughness={0.15} />
       </mesh>
-      {/* 4辺の縦ネオンエッジ */}
-      {[[-1,-1],[1,-1],[1,1],[-1,1]].map(([sx,sz], i) => (
-        <mesh key={`e${i}`} position={[sx * w / 2, 0, sz * d / 2]}>
-          <boxGeometry args={[0.06, h * 0.95, 0.06]} />
-          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.5} toneMapped={false} />
-        </mesh>
-      ))}
-      {/* 上部ネオン帯 (前面 + 側面) */}
+      {/* 上部ネオン帯 */}
       <mesh position={[0, h / 2 - 0.15, d / 2 + 0.02]}>
         <planeGeometry args={[w * 0.95, 0.2]} />
         <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.8} toneMapped={false} />
       </mesh>
-      <mesh position={[w / 2 + 0.02, h / 2 - 0.15, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[d * 0.95, 0.2]} />
-        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.2} toneMapped={false} />
-      </mesh>
-      {/* 下部ネオンライン */}
-      <mesh position={[0, -h / 2 + 0.08, d / 2 + 0.02]}>
-        <planeGeometry args={[w * 0.9, 0.1]} />
-        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.5} toneMapped={false} />
-      </mesh>
-      {/* 窓 (遠景ビルはスキップ) */}
-      {!skyline && <Windows w={w} h={h} d={d} hue={hue} />}
+      {/* 窓テクスチャ (1枚のプレーンで全窓を表現) */}
+      {winTex && (
+        <mesh position={[0, 0, d / 2 + 0.01]}>
+          <planeGeometry args={[w * 0.92, h * 0.9]} />
+          <meshStandardMaterial map={winTex} emissive="#ffffff" emissiveMap={winTex} emissiveIntensity={0.8} toneMapped={false} />
+        </mesh>
+      )}
       {/* 看板 */}
       {signTex && (
         <mesh position={[0, h / 2 * 0.35, d / 2 + 0.05]}>
@@ -576,96 +594,28 @@ function Building({
           <meshStandardMaterial map={signTex} emissive="#ffffff" emissiveMap={signTex} emissiveIntensity={1.3} toneMapped={false} side={THREE.DoubleSide} />
         </mesh>
       )}
-      {/* ラベル付きは右側面にも縦ネオンサイン */}
       {label && (
         <mesh position={[w / 2 + 0.03, h * 0.1, 0]} rotation={[0, Math.PI / 2, 0]}>
           <planeGeometry args={[0.3, h * 0.5]} />
           <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2} toneMapped={false} />
         </mesh>
       )}
-      {/* コンサート会場 */}
       {type === "concert" && (
-        <>
-          <mesh position={[0, -h / 2 + 2.5, d / 2 + 0.06]}>
-            <planeGeometry args={[3.5, 5]} />
-            <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.8} transparent opacity={0.3} toneMapped={false} />
-          </mesh>
-          <mesh position={[0, h / 2 + 1.2, 0]}>
-            <sphereGeometry args={[3.5, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
-            <meshStandardMaterial color={glass} emissive={accent} emissiveIntensity={0.5} toneMapped={false} />
-          </mesh>
-          <pointLight position={[-2, h / 2 + 3, 0]} intensity={2} color={accent} distance={18} />
-          <pointLight position={[2, h / 2 + 3, 0]} intensity={2} color="#ffd166" distance={18} />
-        </>
+        <mesh position={[0, h / 2 + 1.2, 0]}>
+          <sphereGeometry args={[3.5, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
+          <meshStandardMaterial color={glass} emissive={accent} emissiveIntensity={0.5} toneMapped={false} />
+        </mesh>
       )}
-      {/* カフェ */}
-      {type === "cafe" && (
-        <pointLight position={[0, -h / 2 + 1.5, d / 2 + 1]} intensity={1.2} color="#ffd166" distance={8} />
-      )}
-      {/* 高層アンテナ */}
-      {h > 14 && (
-        <>
-          <mesh position={[0, h / 2 + 1.5, 0]}>
-            <cylinderGeometry args={[0.05, 0.05, 3, 6]} />
-            <meshStandardMaterial color="#444" />
-          </mesh>
-          <mesh position={[0, h / 2 + 3.2, 0]}>
-            <sphereGeometry args={[0.1, 8, 8]} />
-            <meshStandardMaterial color="#ff3d8b" emissive="#ff3d8b" emissiveIntensity={3} toneMapped={false} />
-          </mesh>
-        </>
+      {h > 30 && (
+        <mesh position={[0, h / 2 + 1.5, 0]}>
+          <cylinderGeometry args={[0.05, 0.05, 3, 4]} />
+          <meshStandardMaterial color="#444" />
+        </mesh>
       )}
     </group>
   );
 }
 
-function Windows({
-  w,
-  h,
-  d,
-  hue,
-}: {
-  w: number;
-  h: number;
-  d: number;
-  hue: number;
-}) {
-  const items = useMemo(() => {
-    const rng = mulberry32(Math.floor(w * 1000 + h * 100 + d * 10));
-    const out: { x: number; y: number; on: boolean }[] = [];
-    const cols = Math.max(2, Math.floor(w / 0.8));
-    const rows = Math.max(3, Math.floor(h / 1.2));
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        out.push({
-          x: -w / 2 + (c + 0.5) * (w / cols),
-          y: -h / 2 + (r + 0.5) * (h / rows),
-          on: rng() > 0.35,
-        });
-      }
-    }
-    return out;
-  }, [w, h, d]);
-  const litCol = useMemo(
-    () => new THREE.Color(`hsl(${(hue + 200) % 360}, 100%, 70%)`),
-    [hue]
-  );
-  return (
-    <group position={[0, 0, d / 2 + 0.01]}>
-      {items.map((it, i) => (
-        <mesh key={i} position={[it.x, it.y, 0]}>
-          <planeGeometry args={[0.18, 0.32]} />
-          <meshStandardMaterial
-            color={it.on ? litCol : "#0a0612"}
-            emissive={it.on ? litCol : "#000"}
-            emissiveIntensity={it.on ? 1.4 : 0}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
 
 // ===== 中央広場 (ヴィッラ・デステ風多段カスケード噴水) =====
 function CentralPlaza() {
@@ -711,8 +661,8 @@ function CentralPlaza() {
       </mesh>
       {/* カスケード (第1段→プール) */}
       <group ref={waterRef}>
-        {Array.from({ length: 16 }).map((_, i) => {
-          const a = (i / 16) * Math.PI * 2;
+        {Array.from({ length: 8 }).map((_, i) => {
+          const a = (i / 8) * Math.PI * 2;
           return (
             <mesh key={`c1${i}`} position={[Math.cos(a) * 4.3, 0.5, Math.sin(a) * 4.3]} rotation={[0, -a, 0]}>
               <planeGeometry args={[1.4, 0.7]} />
@@ -728,8 +678,8 @@ function CentralPlaza() {
         <meshStandardMaterial color="#8b7050" metalness={0.2} roughness={0.72} />
       </mesh>
       {/* カスケード (第2段→第1段) */}
-      {Array.from({ length: 10 }).map((_, i) => {
-        const a = (i / 10) * Math.PI * 2;
+      {Array.from({ length: 6 }).map((_, i) => {
+        const a = (i / 6) * Math.PI * 2;
         return (
           <mesh key={`c2${i}`} position={[Math.cos(a) * 2.9, 1.2, Math.sin(a) * 2.9]} rotation={[0, -a, 0]}>
             <planeGeometry args={[1.0, 0.5]} />
@@ -777,8 +727,8 @@ function CentralPlaza() {
       })}
 
       {/* ===== アーチ型水ジェット (放物線状に外へ) ===== */}
-      {Array.from({ length: 8 }).map((_, i) => {
-        const a = (i / 8) * Math.PI * 2;
+      {Array.from({ length: 4 }).map((_, i) => {
+        const a = (i / 4) * Math.PI * 2;
         return (
           <mesh key={`arc${i}`} position={[Math.cos(a) * 3.2, 2.2, Math.sin(a) * 3.2]} rotation={[Math.sin(a) * 0.7, 0, -Math.cos(a) * 0.7]}>
             <cylinderGeometry args={[0.025, 0.025, 3.5, 6]} />
@@ -788,21 +738,7 @@ function CentralPlaza() {
       })}
 
       {/* ===== ゴールデン照明 (暖色アップライト) ===== */}
-      <pointLight position={[0, 0.3, 0]} intensity={3.5} color="#ffaa44" distance={18} />
-      <pointLight position={[0, 3, 0]} intensity={2.5} color="#ff9922" distance={14} />
-      <pointLight position={[0, 5, 0]} intensity={1.5} color="#ffd166" distance={10} />
-      {[0, 1, 2, 3].map(i => {
-        const a = (i / 4) * Math.PI * 2;
-        return (
-          <pointLight key={`ul${i}`} position={[Math.cos(a) * 4, 0.2, Math.sin(a) * 4]} intensity={1.5} color="#ffcc66" distance={8} />
-        );
-      })}
-      {[0, 1, 2, 3].map(i => {
-        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-        return (
-          <pointLight key={`ul2${i}`} position={[Math.cos(a) * 2.5, 1.5, Math.sin(a) * 2.5]} intensity={1} color="#ff8833" distance={6} />
-        );
-      })}
+      <pointLight position={[0, 1, 0]} intensity={4} color="#ffaa44" distance={20} />
 
       {/* ===== 周辺の装飾 ===== */}
       {/* 石柱ポール + ゴールドランプ */}
@@ -812,23 +748,22 @@ function CentralPlaza() {
       ].map(([px, pz], i) => (
         <group key={`pole${i}`} position={[px, 0, pz]}>
           <mesh position={[0, 1.5, 0]}>
-            <cylinderGeometry args={[0.08, 0.12, 3, 8]} />
+            <cylinderGeometry args={[0.08, 0.12, 3, 6]} />
             <meshStandardMaterial color="#8b7050" metalness={0.35} roughness={0.55} />
           </mesh>
           <mesh position={[0, 3.1, 0]}>
-            <sphereGeometry args={[0.15, 8, 8]} />
-            <meshStandardMaterial color="#ffd166" emissive="#ffaa44" emissiveIntensity={2} toneMapped={false} />
+            <sphereGeometry args={[0.15, 6, 6]} />
+            <meshStandardMaterial color="#ffd166" emissive="#ffaa44" emissiveIntensity={2.5} toneMapped={false} />
           </mesh>
-          <pointLight position={[0, 3.2, 0]} intensity={0.8} color="#ffaa44" distance={8} />
         </group>
       ))}
 
       {/* 植栽 (低木) */}
-      {Array.from({ length: 12 }).map((_, i) => {
-        const a = (i / 12) * Math.PI * 2;
+      {Array.from({ length: 8 }).map((_, i) => {
+        const a = (i / 8) * Math.PI * 2;
         return (
           <mesh key={`bush${i}`} position={[Math.cos(a) * 10, 0.5, Math.sin(a) * 10]}>
-            <sphereGeometry args={[0.7, 8, 8]} />
+            <sphereGeometry args={[0.7, 6, 6]} />
             <meshStandardMaterial color="#2a6b35" roughness={0.85} />
           </mesh>
         );
@@ -1239,7 +1174,7 @@ function NPCCar({
 function NPCCars() {
   const data = useMemo(() => {
     const rng = mulberry32(999);
-    const routes = generateCarRoutes(12, rng);
+    const routes = generateCarRoutes(6, rng);
     const colors = ["#ff3d8b", "#7b2cff", "#ffd166", "#00e6ff", "#ff6644", "#44ff88"];
     return routes.map((route, i) => ({
       route,
@@ -1328,7 +1263,7 @@ function NPCPedestrian({
 function NPCPedestrians() {
   const peds = useMemo(() => {
     const rng = mulberry32(7777);
-    return Array.from({ length: 20 }, (_, i) => ({
+    return Array.from({ length: 10 }, (_, i) => ({
       startX: (rng() - 0.5) * 700,
       startZ: (rng() - 0.5) * 700,
       skinHue: Math.floor(rng() * 40 + 15),
@@ -1535,8 +1470,8 @@ export function makeBuildings(): BuildingBox[] {
   ];
   let labelIdx = 0;
 
-  for (let gx = -420; gx <= 420; gx += 25) {
-    for (let gz = -420; gz <= 280; gz += 25) {
+  for (let gx = -420; gx <= 420; gx += 45) {
+    for (let gz = -420; gz <= 280; gz += 45) {
       const cx = gx + (rng() - 0.5) * 10;
       const cz = gz + (rng() - 0.5) * 10;
       if (isOnRoad(cx, cz)) continue;
@@ -1581,7 +1516,7 @@ function makeSkyline(): BuildingBox[] {
   const out: BuildingBox[] = [];
   const rng = mulberry32(1234);
   const hues = [260, 280, 300, 320, 340, 200, 220, 180, 40, 30];
-  for (let i = 0; i < 220; i++) {
+  for (let i = 0; i < 80; i++) {
     const angle = rng() * Math.PI * 2;
     const dist = 550 + rng() * 350;
     const x = Math.cos(angle) * dist;
@@ -1655,7 +1590,7 @@ function LunaDome() {
     const rng = mulberry32(3333);
     const out: { x: number; y: number; z: number; color: string }[] = [];
     const colors = ["#ff3d8b", "#00e6ff", "#7b2cff", "#ffd166"];
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 30; i++) {
       const angle = rng() * Math.PI * 2;
       const r = 10 + rng() * 16;
       const tier = Math.floor((r - 10) / 5.5);
@@ -1679,7 +1614,7 @@ function LunaDome() {
     <group position={[x, 0, z]}>
       {/* ドーム外殻 (半球) */}
       <mesh position={[0, baseH, 0]}>
-        <sphereGeometry args={[radius, 48, 32, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
+        <sphereGeometry args={[radius, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
         <meshStandardMaterial color="#d8d8e8" metalness={0.5} roughness={0.25} side={THREE.DoubleSide} />
       </mesh>
       {/* グリッドワイヤーフレーム */}
@@ -1689,7 +1624,7 @@ function LunaDome() {
       </mesh>
       {/* 円筒ベース */}
       <mesh position={[0, baseH / 2, 0]}>
-        <cylinderGeometry args={[radius, radius + 1, baseH, 48]} />
+        <cylinderGeometry args={[radius, radius + 1, baseH, 32]} />
         <meshStandardMaterial color="#2a2040" metalness={0.6} roughness={0.3} side={THREE.DoubleSide} />
       </mesh>
       {/* ネオンバンド (ドーム接合部) */}
@@ -1717,7 +1652,10 @@ function LunaDome() {
           <boxGeometry args={[doorW + 1.2, 0.5, 1.2]} />
           <meshStandardMaterial color="#ff3d8b" emissive="#ff3d8b" emissiveIntensity={2} toneMapped={false} />
         </mesh>
-        <pointLight position={[0, 3, 2]} intensity={2} color="#7b2cff" distance={15} />
+        <mesh position={[0, 3, 2]}>
+          <sphereGeometry args={[0.3, 6, 6]} />
+          <meshStandardMaterial color="#7b2cff" emissive="#7b2cff" emissiveIntensity={3} toneMapped={false} />
+        </mesh>
       </group>
 
       {/* LUNA DOME サイン */}
@@ -1759,17 +1697,14 @@ function LunaDome() {
       })}
 
       {/* コンサート照明 */}
-      <pointLight position={[0, domeH - 2, 0]} intensity={3} color="#ff3d8b" distance={50} />
-      <pointLight position={[8, domeH - 5, 0]} intensity={2} color="#00e6ff" distance={35} />
-      <pointLight position={[-8, domeH - 5, 0]} intensity={2} color="#7b2cff" distance={35} />
-      <pointLight position={[0, domeH - 5, 8]} intensity={1.5} color="#ffd166" distance={30} />
-      <pointLight position={[0, domeH - 5, -8]} intensity={1.5} color="#ff3d8b" distance={30} />
-      <pointLight position={[0, 4, 0]} intensity={3} color="#ffffff" distance={12} />
+      <pointLight position={[0, domeH - 2, 0]} intensity={4} color="#ff3d8b" distance={50} />
+      <pointLight position={[0, domeH - 5, 0]} intensity={2.5} color="#7b2cff" distance={40} />
+      <pointLight position={[0, 4, 0]} intensity={3} color="#ffffff" distance={15} />
 
       {/* レーザービーム (回転) */}
       <group ref={laserRef} position={[0, baseH + domeH * 0.3, 0]}>
-        {Array.from({ length: 8 }).map((_, i) => {
-          const a = (i / 8) * Math.PI * 2;
+        {Array.from({ length: 4 }).map((_, i) => {
+          const a = (i / 4) * Math.PI * 2;
           return (
             <mesh key={`ls${i}`} rotation={[Math.cos(a) * 0.5, a, 0]}>
               <cylinderGeometry args={[0.02, 0.02, domeH * 1.2, 4]} />
@@ -1810,8 +1745,8 @@ function RoadNetwork() {
               <planeGeometry args={[2, 1200]} />
               <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
             </mesh>
-            {rx === 0 && Array.from({ length: 60 }).map((_, i) => (
-              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.02, -295 + i * 10]}>
+            {rx === 0 && Array.from({ length: 30 }).map((_, i) => (
+              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.02, -295 + i * 20]}>
                 <planeGeometry args={[0.22, 2.4]} />
                 <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
               </mesh>
@@ -1827,8 +1762,8 @@ function RoadNetwork() {
               <planeGeometry args={[1200, w]} />
               <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
             </mesh>
-            {rz === 0 && Array.from({ length: 60 }).map((_, i) => (
-              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[-295 + i * 10, 0.02, rz]}>
+            {rz === 0 && Array.from({ length: 30 }).map((_, i) => (
+              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[-295 + i * 20, 0.02, rz]}>
                 <planeGeometry args={[2.4, 0.22]} />
                 <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
               </mesh>
@@ -1848,18 +1783,18 @@ function City() {
   const palms = useMemo(() => {
     const rng = mulberry32(555);
     const out: { x: number; z: number; s: number }[] = [];
-    for (const rx of ROAD_XS) {
-      for (let z = -420; z <= 280; z += 25) {
-        const w = roadWidth(rx);
+    for (const rx of [0]) {
+      const w = roadWidth(rx);
+      for (let z = -400; z <= 280; z += 60) {
         out.push({ x: rx + w / 2 + 3, z: z + rng() * 8, s: 1.3 + rng() * 0.3 });
         out.push({ x: rx - w / 2 - 3, z: z + rng() * 8, s: 1.3 + rng() * 0.3 });
       }
     }
-    for (let x = -420; x <= 420; x += 25) {
+    for (let x = -300; x <= 300; x += 80) {
       out.push({ x: x + rng() * 6, z: 288 + rng() * 5, s: 1.5 + rng() * 0.4 });
     }
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
       out.push({ x: PLAZA_POS.x + Math.cos(a) * 18, z: PLAZA_POS.z + Math.sin(a) * 18, s: 1.2 + rng() * 0.2 });
     }
     return out;
@@ -1867,11 +1802,10 @@ function City() {
 
   const streetLamps = useMemo(() => {
     const out: { x: number; z: number }[] = [];
-    for (const rx of ROAD_XS) {
+    for (const rx of [0, -100, 100]) {
       const w = roadWidth(rx);
-      for (let z = -400; z <= 280; z += 40) {
+      for (let z = -400; z <= 280; z += 80) {
         out.push({ x: rx + w / 2 + 1.5, z });
-        out.push({ x: rx - w / 2 - 1.5, z });
       }
     }
     return out;
@@ -1926,10 +1860,13 @@ function City() {
       {streetLamps.map((l, i) => (
         <group key={`sl${i}`}>
           <mesh position={[l.x, 3, l.z]}>
-            <cylinderGeometry args={[0.06, 0.08, 6, 6]} />
+            <cylinderGeometry args={[0.06, 0.08, 6, 4]} />
             <meshStandardMaterial color="#444" />
           </mesh>
-          <pointLight position={[l.x, 6.2, l.z]} intensity={0.5} color="#ffddaa" distance={14} />
+          <mesh position={[l.x, 6.2, l.z]}>
+            <sphereGeometry args={[0.25, 6, 6]} />
+            <meshStandardMaterial color="#ffddaa" emissive="#ffddaa" emissiveIntensity={2.5} toneMapped={false} />
+          </mesh>
         </group>
       ))}
     </group>
@@ -2405,7 +2342,7 @@ export function City3D({ avatar }: { avatar: UserAvatar }) {
       <Canvas
         shadows
         camera={{ position: [0, 8, 14], fov: 62, near: 0.1, far: 2500 }}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
         <SceneInner avatar={avatar} input={inputRef} onEnterGallery={handleEnterGallery} />
