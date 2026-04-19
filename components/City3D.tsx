@@ -146,9 +146,11 @@ function CameraDragArea({
 function Avatar3D({
   avatar,
   walkPhase,
+  walkSpeed,
 }: {
   avatar: UserAvatar;
   walkPhase: number;
+  walkSpeed: number;
 }) {
   const skin = useMemo(
     () => new THREE.Color(`hsl(${avatar.skinHue}, 50%, 70%)`),
@@ -175,17 +177,39 @@ function Avatar3D({
     [avatar.outfitHueB]
   );
 
-  const swingLeg = Math.sin(walkPhase) * 0.55;
-  const swingArm = Math.sin(walkPhase + Math.PI) * 0.45;
+  const s = walkSpeed;
+  const p = walkPhase;
+  const sinP = Math.sin(p);
+
+  // Body bounce: high at mid-stance, low at double-support (2× frequency)
+  const bodyBob = s * (1 - Math.cos(p * 2)) * 0.02;
+  const bodyLean = s * 0.06;
+  const bodySideRoll = s * sinP * 0.025;
+
+  // Hip swing: positive = leg back, negative = leg forward
+  const hipR = s * sinP * 0.5;
+  const hipL = -s * sinP * 0.5;
+
+  // Knee bend: more during back-swing to clear ground
+  const kneeR = s * Math.pow(Math.max(0, sinP), 1.5) * 0.9;
+  const kneeL = s * Math.pow(Math.max(0, -sinP), 1.5) * 0.9;
+
+  // Shoulder swing: opposite to legs
+  const shoulderR = -s * sinP * 0.45;
+  const shoulderL = s * sinP * 0.45;
+
+  // Elbow bend: more when arm swings back
+  const elbowR = -s * (0.15 + Math.max(0, -sinP) * 0.4);
+  const elbowL = -s * (0.15 + Math.max(0, sinP) * 0.4);
 
   return (
-    <group>
-      {/* Head (丸く高解像度な球: カクカク感を排除) */}
+    <group position={[0, bodyBob, 0]} rotation={[bodyLean, 0, bodySideRoll]}>
+      {/* Head */}
       <mesh position={[0, 1.6, 0]} scale={[1, 1.08, 1]} castShadow>
-        <sphereGeometry args={[0.23, 48, 48]} />
+        <sphereGeometry args={[0.23, 32, 32]} />
         <meshStandardMaterial color={skin} roughness={0.6} />
       </mesh>
-      {/* Eyes (front emissive dots) */}
+      {/* Eyes */}
       <mesh position={[-0.06, 1.63, 0.16]}>
         <sphereGeometry args={[0.025, 8, 8]} />
         <meshStandardMaterial
@@ -209,22 +233,21 @@ function Avatar3D({
         <boxGeometry args={[0.06, 0.012, 0.005]} />
         <meshStandardMaterial color={lip} emissive={lip} emissiveIntensity={0.4} />
       </mesh>
-      {/* Hair cap (滑らかな半ドーム + 束感のある曲面) */}
+      {/* Hair cap */}
       <mesh position={[0, 1.66, -0.015]} scale={[1.04, 0.9, 1.06]} castShadow>
-        {/* 上半球だけの部分球にして、頭の形にフィットするヘア */}
         <sphereGeometry
-          args={[0.255, 48, 48, 0, Math.PI * 2, 0, Math.PI * 0.6]}
+          args={[0.255, 24, 24, 0, Math.PI * 2, 0, Math.PI * 0.6]}
         />
         <meshStandardMaterial color={hair} roughness={0.5} />
       </mesh>
-      {/* 前髪 (丸みのある束) */}
+      {/* 前髪 */}
       <mesh position={[0, 1.58, 0.17]} rotation={[-0.25, 0, 0]} castShadow>
         <sphereGeometry
-          args={[0.2, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.42]}
+          args={[0.2, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.42]}
         />
         <meshStandardMaterial color={hair} roughness={0.5} />
       </mesh>
-      {/* 長髪系: 背中に流れるロングヘア (ボックスやめてカプセル + 末広がり) */}
+      {/* 長髪系 */}
       {(avatar.parts.hair === "long-straight" ||
         avatar.parts.hair === "long-wave") && (
         <mesh
@@ -233,15 +256,15 @@ function Avatar3D({
           scale={[1.05, 1, 0.55]}
           castShadow
         >
-          <capsuleGeometry args={[0.17, 0.52, 8, 20]} />
+          <capsuleGeometry args={[0.17, 0.52, 6, 12]} />
           <meshStandardMaterial color={hair} roughness={0.55} />
         </mesh>
       )}
-      {/* ポニーテール: 結び目 + 後ろに流れる尻尾 */}
+      {/* ポニーテール */}
       {avatar.parts.hair === "ponytail" && (
         <>
           <mesh position={[0, 1.66, -0.2]} castShadow>
-            <sphereGeometry args={[0.07, 24, 24]} />
+            <sphereGeometry args={[0.07, 12, 12]} />
             <meshStandardMaterial color={hair} roughness={0.55} />
           </mesh>
           <mesh
@@ -250,12 +273,12 @@ function Avatar3D({
             scale={[0.7, 1, 0.7]}
             castShadow
           >
-            <capsuleGeometry args={[0.08, 0.38, 8, 16]} />
+            <capsuleGeometry args={[0.08, 0.38, 6, 12]} />
             <meshStandardMaterial color={hair} roughness={0.55} />
           </mesh>
         </>
       )}
-      {/* ボブ: あごのラインに丸くまとまる */}
+      {/* ボブ */}
       {avatar.parts.hair === "bob" && (
         <mesh
           position={[0, 1.48, -0.02]}
@@ -263,7 +286,7 @@ function Avatar3D({
           castShadow
         >
           <sphereGeometry
-            args={[0.23, 40, 40, 0, Math.PI * 2, 0, Math.PI * 0.78]}
+            args={[0.23, 24, 24, 0, Math.PI * 2, 0, Math.PI * 0.78]}
           />
           <meshStandardMaterial color={hair} roughness={0.5} />
         </mesh>
@@ -272,20 +295,20 @@ function Avatar3D({
       {avatar.parts.hair === "twin-buns" && (
         <>
           <mesh position={[0.22, 1.82, -0.02]} castShadow>
-            <sphereGeometry args={[0.1, 24, 24]} />
+            <sphereGeometry args={[0.1, 12, 12]} />
             <meshStandardMaterial color={hair} roughness={0.5} />
           </mesh>
           <mesh position={[-0.22, 1.82, -0.02]} castShadow>
-            <sphereGeometry args={[0.1, 24, 24]} />
+            <sphereGeometry args={[0.1, 12, 12]} />
             <meshStandardMaterial color={hair} roughness={0.5} />
           </mesh>
         </>
       )}
-      {/* ハーフアップ: 小さな結び目 + ゆるやかな後ろ髪 */}
+      {/* ハーフアップ */}
       {avatar.parts.hair === "half-up" && (
         <>
           <mesh position={[0, 1.84, -0.06]} castShadow>
-            <sphereGeometry args={[0.08, 24, 24]} />
+            <sphereGeometry args={[0.08, 12, 12]} />
             <meshStandardMaterial color={hair} roughness={0.5} />
           </mesh>
           <mesh
@@ -293,24 +316,23 @@ function Avatar3D({
             scale={[1, 1, 0.55]}
             castShadow
           >
-            <capsuleGeometry args={[0.14, 0.3, 8, 16]} />
+            <capsuleGeometry args={[0.14, 0.3, 6, 12]} />
             <meshStandardMaterial color={hair} roughness={0.55} />
           </mesh>
         </>
       )}
-      {/* モヒカン・フェード: 細く高い稜線 */}
+      {/* モヒカン・フェード */}
       {avatar.parts.hair === "mohawk-fade" && (
         <mesh
           position={[0, 1.82, 0]}
           scale={[0.35, 1, 1]}
-          rotation={[0, 0, 0]}
           castShadow
         >
-          <capsuleGeometry args={[0.08, 0.2, 8, 16]} />
+          <capsuleGeometry args={[0.08, 0.2, 6, 12]} />
           <meshStandardMaterial color={hair} roughness={0.45} />
         </mesh>
       )}
-      {/* Torso (outfit A) */}
+      {/* Torso */}
       <mesh position={[0, 1.18, 0]} castShadow>
         <boxGeometry args={[0.44, 0.6, 0.26]} />
         <meshStandardMaterial
@@ -319,7 +341,7 @@ function Avatar3D({
           emissiveIntensity={0.18}
         />
       </mesh>
-      {/* Belt accent (outfit B) */}
+      {/* Belt accent */}
       <mesh position={[0, 0.86, 0]}>
         <boxGeometry args={[0.46, 0.06, 0.28]} />
         <meshStandardMaterial
@@ -329,33 +351,83 @@ function Avatar3D({
           toneMapped={false}
         />
       </mesh>
-      {/* Arms */}
+      {/* Right arm (upper arm + forearm with elbow joint) */}
       <group position={[0.27, 1.4, 0]}>
-        <mesh rotation={[swingArm, 0, 0.12]} position={[0, -0.22, 0]} castShadow>
-          <boxGeometry args={[0.12, 0.5, 0.12]} />
-          <meshStandardMaterial color={skin} />
-        </mesh>
+        <group rotation={[shoulderR, 0, 0.12]}>
+          <mesh position={[0, -0.125, 0]} castShadow>
+            <boxGeometry args={[0.12, 0.25, 0.12]} />
+            <meshStandardMaterial color={outA} emissive={outA} emissiveIntensity={0.1} />
+          </mesh>
+          <group position={[0, -0.25, 0]}>
+            <group rotation={[elbowR, 0, 0]}>
+              <mesh position={[0, -0.125, 0]}>
+                <boxGeometry args={[0.11, 0.25, 0.11]} />
+                <meshStandardMaterial color={skin} />
+              </mesh>
+            </group>
+          </group>
+        </group>
       </group>
+      {/* Left arm */}
       <group position={[-0.27, 1.4, 0]}>
-        <mesh rotation={[-swingArm, 0, -0.12]} position={[0, -0.22, 0]} castShadow>
-          <boxGeometry args={[0.12, 0.5, 0.12]} />
-          <meshStandardMaterial color={skin} />
-        </mesh>
+        <group rotation={[shoulderL, 0, -0.12]}>
+          <mesh position={[0, -0.125, 0]} castShadow>
+            <boxGeometry args={[0.12, 0.25, 0.12]} />
+            <meshStandardMaterial color={outA} emissive={outA} emissiveIntensity={0.1} />
+          </mesh>
+          <group position={[0, -0.25, 0]}>
+            <group rotation={[elbowL, 0, 0]}>
+              <mesh position={[0, -0.125, 0]}>
+                <boxGeometry args={[0.11, 0.25, 0.11]} />
+                <meshStandardMaterial color={skin} />
+              </mesh>
+            </group>
+          </group>
+        </group>
       </group>
-      {/* Legs (outfit B) */}
+      {/* Right leg (upper leg + lower leg with knee joint + shoe) */}
       <group position={[0.12, 0.82, 0]}>
-        <mesh rotation={[swingLeg, 0, 0]} position={[0, -0.36, 0]} castShadow>
-          <boxGeometry args={[0.16, 0.72, 0.16]} />
-          <meshStandardMaterial color={outB} />
-        </mesh>
+        <group rotation={[hipR, 0, 0]}>
+          <mesh position={[0, -0.18, 0]} castShadow>
+            <boxGeometry args={[0.16, 0.36, 0.16]} />
+            <meshStandardMaterial color={outB} />
+          </mesh>
+          <group position={[0, -0.36, 0]}>
+            <group rotation={[kneeR, 0, 0]}>
+              <mesh position={[0, -0.18, 0]} castShadow>
+                <boxGeometry args={[0.14, 0.36, 0.14]} />
+                <meshStandardMaterial color={outB} />
+              </mesh>
+              <mesh position={[0, -0.39, 0.04]}>
+                <boxGeometry args={[0.16, 0.06, 0.22]} />
+                <meshStandardMaterial color="#1a1a1a" />
+              </mesh>
+            </group>
+          </group>
+        </group>
       </group>
+      {/* Left leg */}
       <group position={[-0.12, 0.82, 0]}>
-        <mesh rotation={[-swingLeg, 0, 0]} position={[0, -0.36, 0]} castShadow>
-          <boxGeometry args={[0.16, 0.72, 0.16]} />
-          <meshStandardMaterial color={outB} />
-        </mesh>
+        <group rotation={[hipL, 0, 0]}>
+          <mesh position={[0, -0.18, 0]} castShadow>
+            <boxGeometry args={[0.16, 0.36, 0.16]} />
+            <meshStandardMaterial color={outB} />
+          </mesh>
+          <group position={[0, -0.36, 0]}>
+            <group rotation={[kneeL, 0, 0]}>
+              <mesh position={[0, -0.18, 0]} castShadow>
+                <boxGeometry args={[0.14, 0.36, 0.14]} />
+                <meshStandardMaterial color={outB} />
+              </mesh>
+              <mesh position={[0, -0.39, 0.04]}>
+                <boxGeometry args={[0.16, 0.06, 0.22]} />
+                <meshStandardMaterial color="#1a1a1a" />
+              </mesh>
+            </group>
+          </group>
+        </group>
       </group>
-      {/* アクセサリー (簡易ヒント) */}
+      {/* Accessories */}
       {avatar.parts.accessory === "neon-shades" && (
         <mesh position={[0, 1.65, 0.17]}>
           <boxGeometry args={[0.28, 0.06, 0.02]} />
@@ -386,11 +458,11 @@ function Avatar3D({
 function PhotoHall() {
   const { x, z, w, d, h, doorOffsetX, doorW, hue } = PHOTO_HALL;
   const wallMat = useMemo(
-    () => new THREE.Color(`hsl(${hue}, 50%, 20%)`),
+    () => new THREE.Color(`hsl(${hue}, 35%, 72%)`),
     []
   );
   const accent = useMemo(
-    () => new THREE.Color(`hsl(${(hue + 40) % 360}, 90%, 65%)`),
+    () => new THREE.Color(`hsl(${(hue + 40) % 360}, 50%, 55%)`),
     []
   );
 
@@ -504,112 +576,129 @@ function PhotoHall() {
   );
 }
 
-// ===== ビル (ガラス素材 + ネオン縁取り) =====
+// ===== ビル (カラフル低層 – Roblox / Zootopia 風) =====
 function Building({
   x, z, w, d, h, hue, label, type, skyline,
 }: BuildingBox) {
-  const glass = useMemo(() => new THREE.Color(`hsl(${hue}, 45%, 18%)`), [hue]);
-  const accent = useMemo(() => new THREE.Color(`hsl(${(hue + 40) % 360}, 95%, 65%)`), [hue]);
+  const wallCol = useMemo(() => new THREE.Color(`hsl(${hue}, 35%, 72%)`), [hue]);
+  const trimCol = useMemo(() => new THREE.Color(`hsl(${(hue + 30) % 360}, 40%, 55%)`), [hue]);
+  const roofCol = useMemo(() => new THREE.Color(`hsl(${(hue + 60) % 360}, 30%, 45%)`), [hue]);
 
-  const signTex = useMemo(() => {
-    if (!label || typeof document === "undefined") return null;
+  const faceTex = useMemo(() => {
+    if (typeof document === "undefined") return null;
     const c = document.createElement("canvas");
-    c.width = 512;
-    c.height = 128;
-    const ctx = c.getContext("2d");
-    if (!ctx) return null;
-    ctx.fillStyle = `hsla(${hue}, 50%, 8%, 0.9)`;
-    ctx.fillRect(0, 0, 512, 128);
-    const neonHex = `hsl(${(hue + 40) % 360}, 100%, 70%)`;
-    ctx.strokeStyle = neonHex;
-    ctx.lineWidth = 5;
-    ctx.strokeRect(6, 6, 500, 116);
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 46px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.shadowColor = neonHex;
-    ctx.shadowBlur = 18;
-    ctx.fillText(label, 256, 64);
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, [label, hue]);
-
-  const winTex = useMemo(() => {
-    if (skyline || typeof document === "undefined") return null;
-    const c = document.createElement("canvas");
-    c.width = 128;
+    c.width = 256;
     c.height = 256;
     const ctx = c.getContext("2d");
     if (!ctx) return null;
-    ctx.fillStyle = `hsl(${hue}, 45%, 8%)`;
-    ctx.fillRect(0, 0, 128, 256);
-    const rng = mulberry32(Math.floor(w * 1000 + h * 100 + d * 10));
-    const cols = Math.max(2, Math.floor(w / 1.5));
-    const rows = Math.max(3, Math.floor(h / 3));
-    const cw = 128 / cols;
-    const rh = 256 / rows;
-    for (let r = 0; r < rows; r++) {
-      for (let cc = 0; cc < cols; cc++) {
-        if (rng() > 0.35) {
-          const lum = 40 + Math.floor(rng() * 30);
-          ctx.fillStyle = `hsl(${(hue + 200) % 360}, 80%, ${lum}%)`;
+    const rng = mulberry32(Math.floor(w * 1000 + h * 100 + d * 10 + hue));
+    const wL = `hsl(${hue}, 35%, 72%)`;
+    ctx.fillStyle = wL;
+    ctx.fillRect(0, 0, 256, 256);
+    const floors = Math.max(1, Math.round(h / 4));
+    const cols = Math.max(2, Math.round(w / 3));
+    const fH = 256 / floors;
+    const fW = 256 / cols;
+    const pad = 6;
+    for (let fy = 0; fy < floors; fy++) {
+      for (let fx = 0; fx < cols; fx++) {
+        const lit = rng() > 0.2;
+        const tint = Math.floor(rng() * 3);
+        if (lit) {
+          const cs = tint === 0 ? "hsl(210, 40%, 75%)" : tint === 1 ? "hsl(200, 30%, 82%)" : "hsl(220, 25%, 68%)";
+          ctx.fillStyle = cs;
         } else {
-          ctx.fillStyle = `hsl(${hue}, 20%, 5%)`;
+          ctx.fillStyle = `hsl(210, 20%, 60%)`;
         }
-        ctx.fillRect(cc * cw + 2, r * rh + 2, cw - 4, rh - 4);
+        const wx = fx * fW + pad + 2;
+        const wy = fy * fH + pad + 2;
+        const ww = fW - pad * 2 - 4;
+        const wh = fH - pad * 2 - 4;
+        ctx.fillRect(wx, wy, ww, wh);
+        ctx.strokeStyle = `hsl(${hue}, 20%, 50%)`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(wx - 1, wy - 1, ww + 2, wh + 2);
+        if (lit && rng() > 0.6) {
+          ctx.fillStyle = "rgba(255,255,240,0.12)";
+          ctx.fillRect(wx, wy, ww / 2, wh);
+        }
       }
+      ctx.fillStyle = `hsl(${hue}, 25%, 62%)`;
+      ctx.fillRect(0, fy * fH, 256, 3);
+    }
+    if (label) {
+      ctx.fillStyle = `hsl(${(hue + 60) % 360}, 50%, 35%)`;
+      ctx.fillRect(0, 0, 256, fH * 0.7);
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 28px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, 128, fH * 0.35);
     }
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
-  }, [w, h, d, hue, skyline]);
+  }, [w, h, d, hue, label]);
 
-  const signW = Math.min(w * 0.95, 6);
-  const signH = signW * 0.25;
+  const floors = Math.max(1, Math.round(h / 4));
 
   return (
-    <group position={[x, h / 2, z]}>
-      <mesh castShadow={!skyline} receiveShadow={!skyline}>
+    <group position={[x, 0, z]}>
+      {/* メイン壁体 */}
+      <mesh position={[0, h / 2, 0]} castShadow={!skyline} receiveShadow={!skyline}>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color={glass} metalness={0.7} roughness={0.15} />
+        <meshStandardMaterial color={wallCol} roughness={0.75} metalness={0.05} />
       </mesh>
-      {/* 上部ネオン帯 */}
-      <mesh position={[0, h / 2 - 0.15, d / 2 + 0.02]}>
-        <planeGeometry args={[w * 0.95, 0.2]} />
-        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2.8} toneMapped={false} />
+      {/* 前面窓テクスチャ */}
+      {faceTex && !skyline && (
+        <mesh position={[0, h / 2, d / 2 + 0.02]}>
+          <planeGeometry args={[w * 0.92, h * 0.94]} />
+          <meshStandardMaterial map={faceTex} roughness={0.6} />
+        </mesh>
+      )}
+      {/* 背面窓テクスチャ */}
+      {faceTex && !skyline && (
+        <mesh position={[0, h / 2, -d / 2 - 0.02]} rotation={[0, Math.PI, 0]}>
+          <planeGeometry args={[w * 0.92, h * 0.94]} />
+          <meshStandardMaterial map={faceTex} roughness={0.6} />
+        </mesh>
+      )}
+      {/* 屋根 */}
+      <mesh position={[0, h + 0.15, 0]} castShadow>
+        <boxGeometry args={[w + 0.3, 0.3, d + 0.3]} />
+        <meshStandardMaterial color={roofCol} roughness={0.8} />
       </mesh>
-      {/* 窓テクスチャ (1枚のプレーンで全窓を表現) */}
-      {winTex && (
-        <mesh position={[0, 0, d / 2 + 0.01]}>
-          <planeGeometry args={[w * 0.92, h * 0.9]} />
-          <meshStandardMaterial map={winTex} emissive="#ffffff" emissiveMap={winTex} emissiveIntensity={0.8} toneMapped={false} />
+      {/* 1F の庇 / awning */}
+      {!skyline && (
+        <mesh position={[0, 4.2, d / 2 + 0.6]}>
+          <boxGeometry args={[w * 0.9, 0.12, 1.2]} />
+          <meshStandardMaterial color={trimCol} roughness={0.6} />
         </mesh>
       )}
-      {/* 看板 */}
-      {signTex && (
-        <mesh position={[0, h / 2 * 0.35, d / 2 + 0.05]}>
-          <planeGeometry args={[signW, signH]} />
-          <meshStandardMaterial map={signTex} emissive="#ffffff" emissiveMap={signTex} emissiveIntensity={1.3} toneMapped={false} side={THREE.DoubleSide} />
+      {/* 縁取りトリム (上部) */}
+      <mesh position={[0, h - 0.1, d / 2 + 0.04]}>
+        <boxGeometry args={[w + 0.15, 0.35, 0.1]} />
+        <meshStandardMaterial color={trimCol} roughness={0.7} />
+      </mesh>
+      {/* 1F 基礎帯 */}
+      {!skyline && (
+        <mesh position={[0, 0.3, 0]}>
+          <boxGeometry args={[w + 0.2, 0.6, d + 0.2]} />
+          <meshStandardMaterial color={roofCol} roughness={0.85} />
         </mesh>
       )}
-      {label && (
-        <mesh position={[w / 2 + 0.03, h * 0.1, 0]} rotation={[0, Math.PI / 2, 0]}>
-          <planeGeometry args={[0.3, h * 0.5]} />
-          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={2} toneMapped={false} />
+      {/* バルコニー (3F 以上のビルに追加) */}
+      {!skyline && floors >= 3 && (
+        <mesh position={[0, 8.2, d / 2 + 0.4]}>
+          <boxGeometry args={[w * 0.7, 0.1, 0.8]} />
+          <meshStandardMaterial color={wallCol} roughness={0.7} />
         </mesh>
       )}
-      {type === "concert" && (
-        <mesh position={[0, h / 2 + 1.2, 0]}>
-          <sphereGeometry args={[3.5, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
-          <meshStandardMaterial color={glass} emissive={accent} emissiveIntensity={0.5} toneMapped={false} />
-        </mesh>
-      )}
-      {h > 30 && (
-        <mesh position={[0, h / 2 + 1.5, 0]}>
-          <cylinderGeometry args={[0.05, 0.05, 3, 4]} />
-          <meshStandardMaterial color="#444" />
+      {/* 屋上ユニット (高いビルのみ) */}
+      {!skyline && h > 14 && (
+        <mesh position={[w * 0.2, h + 0.8, -d * 0.15]}>
+          <boxGeometry args={[1.8, 1.2, 1.8]} />
+          <meshStandardMaterial color="#999" roughness={0.8} />
         </mesh>
       )}
     </group>
@@ -636,7 +725,7 @@ function CentralPlaza() {
       {/* 広場の床 (石畳) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <circleGeometry args={[PLAZA_POS.radius, 48]} />
-        <meshStandardMaterial color="#3a2a18" emissive="#1a0e06" emissiveIntensity={0.2} roughness={0.85} />
+        <meshStandardMaterial color="#c0b098" roughness={0.85} />
       </mesh>
 
       {/* ===== ベースプール (最下段) ===== */}
@@ -813,17 +902,15 @@ function AreaSign({
     c.height = 128;
     const ctx = c.getContext("2d");
     if (!ctx) return null;
-    ctx.fillStyle = "rgba(20, 8, 40, 0.85)";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.fillRect(0, 0, 512, 128);
-    ctx.strokeStyle = "#7b2cff";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(8, 8, 496, 112);
-    ctx.fillStyle = "#ffd166";
-    ctx.font = "bold 52px sans-serif";
+    ctx.strokeStyle = "#4488aa";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(6, 6, 500, 116);
+    ctx.fillStyle = "#334455";
+    ctx.font = "bold 48px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.shadowColor = "#ffd166";
-    ctx.shadowBlur = 8;
     ctx.fillText(text, 256, 64);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
@@ -867,25 +954,25 @@ function getCycleState(): { phase: CyclePhase; t: number; seconds: number } {
 function skyColors(s: number): [string, string, string] {
   if (s < 100) {
     const t = s / 100;
-    return [lerpHex("#0a0625", "#2a1850", t), lerpHex("#120830", "#4a2060", t), lerpHex("#1a1040", "#ff7744", t)];
+    return [lerpHex("#2a3060", "#5588cc", t), lerpHex("#4a4080", "#88bbee", t), lerpHex("#ff8855", "#bbddff", t)];
   }
   if (s < 300) {
     const t = (s - 100) / 200;
-    return [lerpHex("#2a1850", "#5599dd", t), lerpHex("#4a2060", "#88ccee", t), lerpHex("#ff7744", "#ffeecc", t)];
+    return [lerpHex("#5588cc", "#4499dd", t), lerpHex("#88bbee", "#aaddff", t), lerpHex("#bbddff", "#eef6ff", t)];
   }
   if (s < 600) {
     return ["#4499dd", "#88ccee", "#ddeeff"];
   }
   if (s < 700) {
     const t = (s - 600) / 100;
-    return [lerpHex("#4499dd", "#3a1858", t), lerpHex("#88ccee", "#6a2860", t), lerpHex("#ddeeff", "#ff6633", t)];
+    return [lerpHex("#4499dd", "#445588", t), lerpHex("#88ccee", "#776688", t), lerpHex("#ddeeff", "#ff8844", t)];
   }
   if (s < 800) {
     const t = (s - 700) / 100;
-    return [lerpHex("#3a1858", "#0e0628", t), lerpHex("#6a2860", "#1a0a38", t), lerpHex("#ff6633", "#2a1050", t)];
+    return [lerpHex("#445588", "#1a2244", t), lerpHex("#776688", "#2a2248", t), lerpHex("#ff8844", "#3a2858", t)];
   }
   const t = (s - 800) / 100;
-  return [lerpHex("#0e0628", "#0a0625", t), lerpHex("#1a0a38", "#120830", t), lerpHex("#2a1050", "#1a1040", t)];
+  return [lerpHex("#1a2244", "#2a3060", t), lerpHex("#2a2248", "#4a4080", t), lerpHex("#3a2858", "#ff8855", t)];
 }
 
 function DynamicSky() {
@@ -1389,29 +1476,27 @@ function MonorailTrain() {
   );
 }
 
-// ===== ヤシの木 =====
-function Palm({ x, z, scale = 1 }: { x: number; z: number; scale?: number }) {
-  const leaves = [0, 1, 2, 3, 4, 5];
+// ===== 街路樹 (スタイライズド広葉樹) =====
+function StreetTree({ x, z, scale = 1 }: { x: number; z: number; scale?: number }) {
+  const rng = mulberry32(Math.floor(x * 100 + z * 10));
+  const leafHue = 100 + Math.floor(rng() * 40);
+  const leafCol = `hsl(${leafHue}, 55%, 38%)`;
+  const trunkH = 2.5 + rng() * 1.5;
+  const crownR = 1.5 + rng() * 0.8;
   return (
     <group position={[x, 0, z]} scale={scale}>
-      <mesh position={[0, 2, 0]} castShadow>
-        <cylinderGeometry args={[0.14, 0.22, 4, 10]} />
-        <meshStandardMaterial color="#3a2812" />
+      <mesh position={[0, trunkH / 2, 0]} castShadow>
+        <cylinderGeometry args={[0.1, 0.18, trunkH, 6]} />
+        <meshStandardMaterial color="#6b4226" roughness={0.9} />
       </mesh>
-      {leaves.map((i) => {
-        const a = (i / leaves.length) * Math.PI * 2;
-        return (
-          <mesh
-            key={i}
-            position={[Math.cos(a) * 0.7, 4.05, Math.sin(a) * 0.7]}
-            rotation={[0, -a, Math.PI / 2.6]}
-            castShadow
-          >
-            <boxGeometry args={[1.6, 0.07, 0.45]} />
-            <meshStandardMaterial color="#1f6b3a" />
-          </mesh>
-        );
-      })}
+      <mesh position={[0, trunkH + crownR * 0.6, 0]} castShadow>
+        <sphereGeometry args={[crownR, 10, 8]} />
+        <meshStandardMaterial color={leafCol} roughness={0.85} />
+      </mesh>
+      <mesh position={[crownR * 0.4, trunkH + crownR * 0.3, crownR * 0.3]} castShadow>
+        <sphereGeometry args={[crownR * 0.7, 8, 6]} />
+        <meshStandardMaterial color={`hsl(${leafHue + 10}, 50%, 42%)`} roughness={0.85} />
+      </mesh>
     </group>
   );
 }
@@ -1443,56 +1528,52 @@ function overlapsAny(x: number, z: number, w: number, d: number, list: BuildingB
 export function makeBuildings(): BuildingBox[] {
   const out: BuildingBox[] = [];
   const rng = mulberry32(42);
-  const hues = [260, 280, 300, 320, 340, 200, 220, 180, 40, 30, 160, 50];
-  const pickHue = () => hues[Math.floor(rng() * hues.length)] + (rng() - 0.5) * 30;
+  const hues = [15, 25, 35, 45, 160, 180, 200, 210, 330, 340, 350, 0, 60, 120];
+  const pickHue = () => hues[Math.floor(rng() * hues.length)] + Math.floor((rng() - 0.5) * 20);
 
   const labels: { label: string; type?: BuildingBox["type"] }[] = [
-    { label: "🎤 콘서트홀", type: "concert" },
-    { label: "☕ 카페", type: "cafe" },
-    { label: "🛍️ 아이돌샵", type: "shop" },
-    { label: "🏢 에이전시", type: "agency" },
-    { label: "🏠 레지던스", type: "residence" },
-    { label: "🎵 라이브" },
-    { label: "📺 MBC" },
-    { label: "🎧 녹음실" },
-    { label: "🎤 노래방" },
-    { label: "🍜 맛집" },
-    { label: "📱 네오폴드" },
-    { label: "🧋 피코소다" },
-    { label: "🎮 게임센터" },
-    { label: "👗 아틀리에", type: "agency" },
-    { label: "📊 매니지먼트" },
-    { label: "✨ MarinLuna" },
-    { label: "📡 미디어" },
-    { label: "🐱 고양이카페", type: "cafe" },
-    { label: "💈 뷰티살롱" },
-    { label: "🏋️ 피트니스" },
+    { label: "FLOURISH BAKERY", type: "cafe" },
+    { label: "☕ Coffee Culture", type: "cafe" },
+    { label: "🛍️ IDOL SHOP", type: "shop" },
+    { label: "🏢 AGENCY", type: "agency" },
+    { label: "🏠 Residence", type: "residence" },
+    { label: "🎵 LIVE HOUSE" },
+    { label: "📺 MBC Studio" },
+    { label: "🎧 Recording" },
+    { label: "🎤 Noraebang" },
+    { label: "🍜 Ramen St." },
+    { label: "📱 NEOFOLD" },
+    { label: "🧋 PIKO SODA" },
+    { label: "🎮 Game Center" },
+    { label: "👗 Atelier", type: "agency" },
+    { label: "✨ MarinLuna HQ" },
+    { label: "📡 Media Tower" },
+    { label: "🐱 Cat Cafe", type: "cafe" },
+    { label: "💈 Beauty Salon" },
+    { label: "🏋️ Fitness" },
+    { label: "📚 Bookstore" },
   ];
   let labelIdx = 0;
 
-  for (let gx = -420; gx <= 420; gx += 45) {
-    for (let gz = -420; gz <= 280; gz += 45) {
-      const cx = gx + (rng() - 0.5) * 10;
-      const cz = gz + (rng() - 0.5) * 10;
+  for (let gx = -420; gx <= 420; gx += 40) {
+    for (let gz = -420; gz <= 280; gz += 40) {
+      const cx = gx + (rng() - 0.5) * 8;
+      const cz = gz + (rng() - 0.5) * 8;
       if (isOnRoad(cx, cz)) continue;
       if (Math.hypot(cx - PLAZA_POS.x, cz - PLAZA_POS.z) < PLAZA_POS.radius + 8) continue;
       if (cz > 280) continue;
       if (Math.hypot(cx - LUNA_DOME.x, cz - LUNA_DOME.z) < LUNA_DOME.radius + 15) continue;
-      if (rng() < 0.3) continue;
+      if (rng() < 0.25) continue;
 
-      const hRoll = rng();
-      let h: number;
-      if (hRoll < 0.4) h = 15 + rng() * 15;
-      else if (hRoll < 0.8) h = 30 + rng() * 30;
-      else h = 60 + rng() * 60;
-
-      const bw = 6 + rng() * 6;
-      const bd = 6 + rng() * 6;
+      const floors = 2 + Math.floor(rng() * 4);
+      const h = floors * 4;
+      const bw = 7 + rng() * 5;
+      const bd = 6 + rng() * 4;
 
       if (overlapsAny(cx, cz, bw, bd, out)) continue;
 
       const bld: BuildingBox = { x: cx, z: cz, w: bw, d: bd, h, hue: pickHue() };
-      if (labelIdx < labels.length && rng() < 0.25) {
+      if (labelIdx < labels.length && rng() < 0.3) {
         bld.label = labels[labelIdx].label;
         bld.type = labels[labelIdx].type;
         labelIdx++;
@@ -1515,7 +1596,7 @@ export function makeBuildings(): BuildingBox[] {
 function makeSkyline(): BuildingBox[] {
   const out: BuildingBox[] = [];
   const rng = mulberry32(1234);
-  const hues = [260, 280, 300, 320, 340, 200, 220, 180, 40, 30];
+  const hues = [15, 30, 45, 60, 120, 160, 200, 210, 330, 350];
   for (let i = 0; i < 80; i++) {
     const angle = rng() * Math.PI * 2;
     const dist = 550 + rng() * 350;
@@ -1725,52 +1806,101 @@ function LunaDome() {
   );
 }
 
-// ===== 道路ネットワーク =====
+// ===== 道路ネットワーク (2車線 + 歩道 + 縁石) =====
 function RoadNetwork() {
+  const asphalt = "#555";
+  const sidewalkCol = "#c8c0b4";
+  const curbCol = "#999";
+  const lineCol = "#eee";
   return (
     <group>
       {ROAD_XS.map((rx) => {
         const w = roadWidth(rx);
+        const swW = 3.5;
         return (
           <group key={`vr${rx}`}>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.01, 0]} receiveShadow>
+            {/* アスファルト */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.02, 0]} receiveShadow>
               <planeGeometry args={[w, 1200]} />
-              <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
+              <meshStandardMaterial color={asphalt} roughness={0.9} />
             </mesh>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx + w / 2 + 1, 0.02, 0]}>
-              <planeGeometry args={[2, 1200]} />
-              <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
-            </mesh>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx - w / 2 - 1, 0.02, 0]}>
-              <planeGeometry args={[2, 1200]} />
-              <meshStandardMaterial color="#1a0e2e" emissive="#2a1840" emissiveIntensity={0.2} />
-            </mesh>
-            {rx === 0 && Array.from({ length: 30 }).map((_, i) => (
-              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.02, -295 + i * 20]}>
-                <planeGeometry args={[0.22, 2.4]} />
-                <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
+            {/* 中央線 (白破線) */}
+            {Array.from({ length: 25 }).map((_, i) => (
+              <mesh key={`cl${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[rx, 0.03, -480 + i * 40]}>
+                <planeGeometry args={[0.2, 5]} />
+                <meshStandardMaterial color={lineCol} roughness={0.5} />
               </mesh>
             ))}
+            {/* 左歩道 */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx - w / 2 - swW / 2, 0.12, 0]}>
+              <planeGeometry args={[swW, 1200]} />
+              <meshStandardMaterial color={sidewalkCol} roughness={0.85} />
+            </mesh>
+            {/* 右歩道 */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[rx + w / 2 + swW / 2, 0.12, 0]}>
+              <planeGeometry args={[swW, 1200]} />
+              <meshStandardMaterial color={sidewalkCol} roughness={0.85} />
+            </mesh>
+            {/* 左縁石 */}
+            <mesh position={[rx - w / 2 - 0.15, 0.07, 0]}>
+              <boxGeometry args={[0.3, 0.14, 1200]} />
+              <meshStandardMaterial color={curbCol} roughness={0.8} />
+            </mesh>
+            {/* 右縁石 */}
+            <mesh position={[rx + w / 2 + 0.15, 0.07, 0]}>
+              <boxGeometry args={[0.3, 0.14, 1200]} />
+              <meshStandardMaterial color={curbCol} roughness={0.8} />
+            </mesh>
           </group>
         );
       })}
       {ROAD_ZS.map((rz) => {
         const w = roadWidth(rz);
+        const swW = 3.5;
         return (
           <group key={`hr${rz}`}>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, rz]} receiveShadow>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, rz]} receiveShadow>
               <planeGeometry args={[1200, w]} />
-              <meshStandardMaterial color="#0a0612" emissive="#1a0530" emissiveIntensity={0.35} />
+              <meshStandardMaterial color={asphalt} roughness={0.9} />
             </mesh>
-            {rz === 0 && Array.from({ length: 30 }).map((_, i) => (
-              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[-295 + i * 20, 0.02, rz]}>
-                <planeGeometry args={[2.4, 0.22]} />
-                <meshStandardMaterial color="#ffd166" emissive="#ffd166" emissiveIntensity={1.4} toneMapped={false} />
+            {Array.from({ length: 25 }).map((_, i) => (
+              <mesh key={`cl${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[-480 + i * 40, 0.03, rz]}>
+                <planeGeometry args={[5, 0.2]} />
+                <meshStandardMaterial color={lineCol} roughness={0.5} />
               </mesh>
             ))}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.12, rz - w / 2 - swW / 2]}>
+              <planeGeometry args={[1200, swW]} />
+              <meshStandardMaterial color={sidewalkCol} roughness={0.85} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.12, rz + w / 2 + swW / 2]}>
+              <planeGeometry args={[1200, swW]} />
+              <meshStandardMaterial color={sidewalkCol} roughness={0.85} />
+            </mesh>
+            <mesh position={[0, 0.07, rz - w / 2 - 0.15]}>
+              <boxGeometry args={[1200, 0.14, 0.3]} />
+              <meshStandardMaterial color={curbCol} roughness={0.8} />
+            </mesh>
+            <mesh position={[0, 0.07, rz + w / 2 + 0.15]}>
+              <boxGeometry args={[1200, 0.14, 0.3]} />
+              <meshStandardMaterial color={curbCol} roughness={0.8} />
+            </mesh>
           </group>
         );
       })}
+      {/* 横断歩道 (主要交差点) */}
+      {ROAD_XS.filter((_, i) => i % 2 === 0).map(rx =>
+        ROAD_ZS.filter((_, j) => j % 2 === 0).map(rz => (
+          <group key={`xw${rx}_${rz}`}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[rx - 3 + i * 1.5, 0.04, rz + roadWidth(rz) / 2 + 1]}>
+                <planeGeometry args={[1.0, 3]} />
+                <meshStandardMaterial color="#eee" roughness={0.5} />
+              </mesh>
+            ))}
+          </group>
+        ))
+      )}
     </group>
   );
 }
@@ -1780,32 +1910,29 @@ function City() {
   const buildings = useMemo(() => makeBuildings(), []);
   const skyline = useMemo(() => makeSkyline(), []);
 
-  const palms = useMemo(() => {
+  const trees = useMemo(() => {
     const rng = mulberry32(555);
     const out: { x: number; z: number; s: number }[] = [];
-    for (const rx of [0]) {
+    for (const rx of ROAD_XS) {
       const w = roadWidth(rx);
-      for (let z = -400; z <= 280; z += 60) {
-        out.push({ x: rx + w / 2 + 3, z: z + rng() * 8, s: 1.3 + rng() * 0.3 });
-        out.push({ x: rx - w / 2 - 3, z: z + rng() * 8, s: 1.3 + rng() * 0.3 });
+      for (let z = -400; z <= 280; z += 35 + Math.floor(rng() * 15)) {
+        out.push({ x: rx + w / 2 + 5.5 + rng() * 1.5, z: z + rng() * 6, s: 1.0 + rng() * 0.4 });
+        out.push({ x: rx - w / 2 - 5.5 - rng() * 1.5, z: z + rng() * 6, s: 1.0 + rng() * 0.4 });
       }
     }
-    for (let x = -300; x <= 300; x += 80) {
-      out.push({ x: x + rng() * 6, z: 288 + rng() * 5, s: 1.5 + rng() * 0.4 });
-    }
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      out.push({ x: PLAZA_POS.x + Math.cos(a) * 18, z: PLAZA_POS.z + Math.sin(a) * 18, s: 1.2 + rng() * 0.2 });
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      out.push({ x: PLAZA_POS.x + Math.cos(a) * 20, z: PLAZA_POS.z + Math.sin(a) * 20, s: 1.1 + rng() * 0.3 });
     }
     return out;
   }, []);
 
   const streetLamps = useMemo(() => {
     const out: { x: number; z: number }[] = [];
-    for (const rx of [0, -100, 100]) {
+    for (const rx of ROAD_XS) {
       const w = roadWidth(rx);
-      for (let z = -400; z <= 280; z += 80) {
-        out.push({ x: rx + w / 2 + 1.5, z });
+      for (let z = -400; z <= 280; z += 60) {
+        out.push({ x: rx + w / 2 + 2, z });
       }
     }
     return out;
@@ -1815,7 +1942,7 @@ function City() {
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, 0]}>
         <planeGeometry args={[1400, 1400]} />
-        <meshStandardMaterial color="#120a22" />
+        <meshStandardMaterial color="#4a8c3f" roughness={0.9} />
       </mesh>
 
       <RoadNetwork />
@@ -1839,18 +1966,14 @@ function City() {
       <MonorailTrack />
       <MonorailTrain />
 
-      {palms.map((p, i) => (
-        <Palm key={i} x={p.x} z={p.z} scale={p.s} />
+      {trees.map((p, i) => (
+        <StreetTree key={i} x={p.x} z={p.z} scale={p.s} />
       ))}
 
-      <Billboard x={0} y={40} z={-250} text="MarinLuna" subText="Rise to Fame" colorA="#ff3d8b" colorB="#7b2cff" width={30} height={8} />
-      <HologramFigure x={0} y={50} z={-250} />
-      <Billboard x={0} y={35} z={250} text="📍 서울" subText="NEON PARADISE" colorA="#00e6ff" colorB="#7b2cff" rotationY={Math.PI} width={26} height={6} />
-      <HologramFigure x={0} y={43} z={250} />
-      <Billboard x={-280} y={35} z={-80} text="✨ DREAM STAGE" subText="꿈의 무대" colorA="#ffd166" colorB="#ff3d8b" rotationY={Math.PI / 2} width={24} height={6} />
-      <Billboard x={280} y={32} z={80} text="🎤 데뷔" subText="THE WORLD IS WATCHING" colorA="#7b2cff" colorB="#00e6ff" rotationY={-Math.PI / 2} width={24} height={6} />
-      <Billboard x={-240} y={28} z={160} text="🌴 파라다이스" subText="TROPICAL CITY" colorA="#44ddaa" colorB="#00bbff" rotationY={Math.PI / 3} width={20} height={5} />
-      <Billboard x={240} y={30} z={-160} text="🎵 K-POP" subText="LIVE TONIGHT" colorA="#ff66aa" colorB="#ffaa44" rotationY={-Math.PI / 3} width={20} height={5} />
+      <Billboard x={0} y={18} z={-250} text="MarinLuna" subText="Rise to Fame" colorA="#ff6688" colorB="#6688cc" width={20} height={5} />
+      <Billboard x={0} y={16} z={250} text="📍 SEOUL" subText="K-POP CITY" colorA="#44aacc" colorB="#6688cc" rotationY={Math.PI} width={18} height={4.5} />
+      <Billboard x={-280} y={16} z={-80} text="✨ DREAM STAGE" subText="꿈의 무대" colorA="#ee9944" colorB="#ee6688" rotationY={Math.PI / 2} width={16} height={4} />
+      <Billboard x={280} y={14} z={80} text="🎤 DEBUT" subText="THE WORLD IS WATCHING" colorA="#6688cc" colorB="#44aacc" rotationY={-Math.PI / 2} width={16} height={4} />
 
       <CityAdBoards />
       <NPCCars />
@@ -1859,13 +1982,17 @@ function City() {
 
       {streetLamps.map((l, i) => (
         <group key={`sl${i}`}>
-          <mesh position={[l.x, 3, l.z]}>
-            <cylinderGeometry args={[0.06, 0.08, 6, 4]} />
-            <meshStandardMaterial color="#444" />
+          <mesh position={[l.x, 2.5, l.z]}>
+            <cylinderGeometry args={[0.05, 0.07, 5, 4]} />
+            <meshStandardMaterial color="#666" roughness={0.6} metalness={0.4} />
           </mesh>
-          <mesh position={[l.x, 6.2, l.z]}>
-            <sphereGeometry args={[0.25, 6, 6]} />
-            <meshStandardMaterial color="#ffddaa" emissive="#ffddaa" emissiveIntensity={2.5} toneMapped={false} />
+          <mesh position={[l.x, 5.2, l.z]}>
+            <cylinderGeometry args={[0.3, 0.15, 0.25, 8]} />
+            <meshStandardMaterial color="#ddd" roughness={0.5} />
+          </mesh>
+          <mesh position={[l.x, 5.4, l.z]}>
+            <sphereGeometry args={[0.12, 6, 6]} />
+            <meshStandardMaterial color="#ffffee" emissive="#ffffee" emissiveIntensity={1.5} toneMapped={false} />
           </mesh>
         </group>
       ))}
@@ -1884,18 +2011,12 @@ function CityAdBoards() {
   // 広告枠をエリアのビル壁面に配置する。
   // 固定スロット位置を用意し、ads から順に割り当てる。
   const SLOTS: { px: number; py: number; pz: number; rotY: number }[] = [
-    // エンタメ通り北側 (コンサート会場横)
-    { px: 12, py: 10, pz: -24, rotY: Math.PI / 2 },
-    // 事務所エリア (Agency Tower 横)
-    { px: -12, py: 12, pz: -25, rotY: -Math.PI / 2 },
-    // ショッピング通り (道路沿い)
-    { px: 8, py: 8, pz: 5, rotY: Math.PI / 2 },
-    // 住宅エリア側
-    { px: -10, py: 7, pz: 10, rotY: -Math.PI / 2 },
-    // 練習生通り
-    { px: 12, py: 8, pz: 22, rotY: Math.PI / 2 },
-    // MarinLuna HQ 近く
-    { px: -18, py: 10, pz: -32, rotY: 0 },
+    { px: 30, py: 8, pz: -60, rotY: Math.PI / 2 },
+    { px: -30, py: 10, pz: -80, rotY: -Math.PI / 2 },
+    { px: 25, py: 7, pz: 30, rotY: Math.PI / 2 },
+    { px: -25, py: 6, pz: 40, rotY: -Math.PI / 2 },
+    { px: 35, py: 8, pz: 80, rotY: Math.PI / 2 },
+    { px: -35, py: 9, pz: -100, rotY: 0 },
   ];
 
   const items = useMemo(() => {
@@ -2096,6 +2217,7 @@ function Player({
   const groupRef = useRef<THREE.Group>(null);
   const yawRef = useRef(0); // アバターの向き
   const walkRef = useRef(0); // アニメ位相
+  const walkSpeedRef = useRef(0); // 0=idle, 1=full walk
   const posRef = useRef(new THREE.Vector3(PLAZA_POS.x, 0, PLAZA_POS.z + 12));
   const insideHallRef = useRef(false); // エッジトリガー用
   const { camera } = useThree();
@@ -2156,9 +2278,10 @@ function Player({
       while (diff < -Math.PI) diff += Math.PI * 2;
       yawRef.current = cur + diff * Math.min(1, dtc * 12);
       walkRef.current += dtc * 9 * Math.min(1, mag * 1.5);
+      walkSpeedRef.current = THREE.MathUtils.lerp(walkSpeedRef.current, Math.min(1, mag), dtc * 8);
     } else {
-      // 歩行アニメは止める (idle)
       walkRef.current += dtc * 0.5;
+      walkSpeedRef.current = THREE.MathUtils.lerp(walkSpeedRef.current, 0, dtc * 6);
     }
 
     if (groupRef.current) {
@@ -2190,68 +2313,56 @@ function Player({
 
   return (
     <group ref={groupRef}>
-      <Avatar3D avatar={avatar} walkPhase={walkRef.current} />
+      <Avatar3D avatar={avatar} walkPhase={walkRef.current} walkSpeed={walkSpeedRef.current} />
     </group>
   );
 }
 
-// ===== 動的ライティング (昼夜サイクル対応) =====
+// ===== 動的ライティング (明るい昼夜サイクル) =====
 function DynamicLighting() {
   const ambRef = useRef<THREE.AmbientLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const dirRef = useRef<THREE.DirectionalLight>(null);
-  const neon1Ref = useRef<THREE.PointLight>(null);
-  const neon2Ref = useRef<THREE.PointLight>(null);
-  const neon3Ref = useRef<THREE.PointLight>(null);
   const { scene } = useThree();
 
   useFrame(() => {
     const { phase, t } = getCycleState();
-    let ambI: number, dirI: number, neonI: number;
+    let ambI: number, dirI: number;
     let ambCol: string, dirCol: string;
 
     if (phase === "morning") {
-      ambI = 0.2 + t * 0.4;
-      dirI = 0.3 + t * 0.8;
-      neonI = 1.2 * (1 - t * 0.8);
-      ambCol = lerpHex("#6050a0", "#8899bb", t);
-      dirCol = lerpHex("#ff8844", "#ffeedd", t);
-      const fogCol = new THREE.Color(lerpHex("#1a0a2e", "#aabbcc", t * 0.5));
-      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.002 - t * 0.0005);
+      ambI = 0.5 + t * 0.3;
+      dirI = 0.6 + t * 0.6;
+      ambCol = lerpHex("#8899bb", "#bbccdd", t);
+      dirCol = lerpHex("#ffaa66", "#ffeedd", t);
+      const fogCol = new THREE.Color(lerpHex("#aabbcc", "#bbddee", t));
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.0015);
     } else if (phase === "day") {
-      ambI = 0.6;
-      dirI = 1.1;
-      neonI = 0.15;
-      ambCol = "#8899bb";
+      ambI = 0.8;
+      dirI = 1.2;
+      ambCol = "#bbccdd";
       dirCol = "#ffeedd";
-      scene.fog = new THREE.FogExp2(0x8899bb, 0.0012);
+      scene.fog = new THREE.FogExp2(0xbbddee, 0.001);
     } else {
-      ambI = 0.6 - t * 0.45;
-      dirI = 1.1 - t * 0.9;
-      neonI = 0.15 + t * 1.6;
-      ambCol = lerpHex("#8899bb", "#2a1848", t);
-      dirCol = lerpHex("#ffeedd", "#443366", t);
-      const fogCol = new THREE.Color(lerpHex("#8899bb", "#0e0620", t));
-      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.0015 + t * 0.001);
+      ambI = 0.8 - t * 0.5;
+      dirI = 1.2 - t * 0.8;
+      ambCol = lerpHex("#bbccdd", "#556688", t);
+      dirCol = lerpHex("#ffeedd", "#8888aa", t);
+      const fogCol = new THREE.Color(lerpHex("#bbddee", "#334466", t));
+      scene.fog = new THREE.FogExp2(fogCol.getHex(), 0.0012 + t * 0.0008);
     }
 
     if (ambRef.current) { ambRef.current.intensity = ambI; ambRef.current.color.set(ambCol); }
     if (dirRef.current) { dirRef.current.intensity = dirI; dirRef.current.color.set(dirCol); }
-    if (hemiRef.current) { hemiRef.current.intensity = phase === "day" ? 0.5 : 0.35; }
-    if (neon1Ref.current) neon1Ref.current.intensity = neonI;
-    if (neon2Ref.current) neon2Ref.current.intensity = neonI * 0.8;
-    if (neon3Ref.current) neon3Ref.current.intensity = neonI * 0.8;
+    if (hemiRef.current) { hemiRef.current.intensity = phase === "day" ? 0.6 : 0.4; }
   });
 
   return (
     <>
-      <ambientLight ref={ambRef} intensity={0.4} color="#7070a0" />
-      <hemisphereLight ref={hemiRef} args={["#ff9966", "#1a0a30", 0.4]} />
-      <directionalLight ref={dirRef} position={[40, 20, -15]} intensity={0.8} color="#ffaa66" castShadow />
-      <directionalLight position={[-10, 50, 0]} intensity={0.2} color="#cc88ff" />
-      <pointLight ref={neon1Ref} position={[0, 8, 0]} intensity={1.2} color="#ff3d8b" distance={50} />
-      <pointLight ref={neon2Ref} position={[12, 6, -10]} intensity={1} color="#7b2cff" distance={40} />
-      <pointLight ref={neon3Ref} position={[-12, 6, 10]} intensity={1} color="#00e6ff" distance={40} />
+      <ambientLight ref={ambRef} intensity={0.7} color="#bbccdd" />
+      <hemisphereLight ref={hemiRef} args={["#aaddff", "#446633", 0.5]} />
+      <directionalLight ref={dirRef} position={[60, 50, 30]} intensity={1.0} color="#ffeedd" castShadow />
+      <directionalLight position={[-30, 40, -20]} intensity={0.3} color="#aabbff" />
     </>
   );
 }
@@ -2268,7 +2379,7 @@ function SceneInner({
 }) {
   const { scene } = useThree();
   useEffect(() => {
-    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.002);
+    scene.fog = new THREE.FogExp2(0xbbddee, 0.001);
     scene.background = null;
   }, [scene]);
 
