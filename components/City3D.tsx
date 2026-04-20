@@ -246,22 +246,28 @@ function Avatar3D({
         <meshStandardMaterial color={skin} roughness={0.55} />
       </mesh>
 
+      {/* ===== NOSE (small bump) ===== */}
+      <mesh position={[0, 1.57, 0.28]}>
+        <sphereGeometry args={[0.022, 8, 8]} />
+        <meshStandardMaterial color={skin} roughness={0.5} />
+      </mesh>
+
       {/* ===== LEFT EYE (white + iris + pupil + highlight) ===== */}
-      <group position={[-0.09, 1.61, 0.22]} scale={[ew, eh, 1]}>
+      <group position={[-0.09, 1.62, 0.27]} scale={[ew, eh, 1]}>
         <mesh>
-          <sphereGeometry args={[0.048, 16, 16]} />
+          <sphereGeometry args={[0.06, 16, 16]} />
           <meshStandardMaterial color={WHITE} />
         </mesh>
-        <mesh position={[0, 0, 0.022]}>
-          <sphereGeometry args={[0.032, 12, 12]} />
+        <mesh position={[0, 0, 0.028]}>
+          <sphereGeometry args={[0.042, 12, 12]} />
           <meshStandardMaterial color={eyeCol} />
         </mesh>
-        <mesh position={[0, 0, 0.038]}>
-          <sphereGeometry args={[0.016, 8, 8]} />
+        <mesh position={[0, 0, 0.048]}>
+          <sphereGeometry args={[0.022, 8, 8]} />
           <meshStandardMaterial color={BLACK} />
         </mesh>
-        <mesh position={[0.012, 0.014, 0.042]}>
-          <sphereGeometry args={[0.007, 6, 6]} />
+        <mesh position={[0.015, 0.016, 0.052]}>
+          <sphereGeometry args={[0.01, 6, 6]} />
           <meshStandardMaterial
             color={WHITE}
             emissive={WHITE}
@@ -270,21 +276,21 @@ function Avatar3D({
         </mesh>
       </group>
       {/* ===== RIGHT EYE ===== */}
-      <group position={[0.09, 1.61, 0.22]} scale={[ew, eh, 1]}>
+      <group position={[0.09, 1.62, 0.27]} scale={[ew, eh, 1]}>
         <mesh>
-          <sphereGeometry args={[0.048, 16, 16]} />
+          <sphereGeometry args={[0.06, 16, 16]} />
           <meshStandardMaterial color={WHITE} />
         </mesh>
-        <mesh position={[0, 0, 0.022]}>
-          <sphereGeometry args={[0.032, 12, 12]} />
+        <mesh position={[0, 0, 0.028]}>
+          <sphereGeometry args={[0.042, 12, 12]} />
           <meshStandardMaterial color={eyeCol} />
         </mesh>
-        <mesh position={[0, 0, 0.038]}>
-          <sphereGeometry args={[0.016, 8, 8]} />
+        <mesh position={[0, 0, 0.048]}>
+          <sphereGeometry args={[0.022, 8, 8]} />
           <meshStandardMaterial color={BLACK} />
         </mesh>
-        <mesh position={[-0.012, 0.014, 0.042]}>
-          <sphereGeometry args={[0.007, 6, 6]} />
+        <mesh position={[-0.015, 0.016, 0.052]}>
+          <sphereGeometry args={[0.01, 6, 6]} />
           <meshStandardMaterial
             color={WHITE}
             emissive={WHITE}
@@ -294,55 +300,69 @@ function Avatar3D({
       </group>
 
       {/* ===== EYEBROWS ===== */}
-      <mesh position={[-0.09, 1.68, 0.21]} rotation={[0.15, 0, 0.06]}>
-        <boxGeometry args={[0.065, 0.014, 0.012]} />
+      <mesh position={[-0.09, 1.69, 0.27]} rotation={[0.3, 0, 0.06]}>
+        <boxGeometry args={[0.07, 0.016, 0.012]} />
         <meshStandardMaterial color={browCol} />
       </mesh>
-      <mesh position={[0.09, 1.68, 0.21]} rotation={[0.15, 0, -0.06]}>
-        <boxGeometry args={[0.065, 0.014, 0.012]} />
+      <mesh position={[0.09, 1.69, 0.27]} rotation={[0.3, 0, -0.06]}>
+        <boxGeometry args={[0.07, 0.016, 0.012]} />
         <meshStandardMaterial color={browCol} />
       </mesh>
 
       {/* ===== MOUTH ===== */}
-      <mesh position={[0, 1.52, 0.24]} rotation={[0, 0, Math.PI / 2]}>
-        <capsuleGeometry args={[0.01, 0.035, 4, 8]} />
+      <mesh position={[0, 1.52, 0.27]} rotation={[0, 0, Math.PI / 2]}>
+        <capsuleGeometry args={[0.012, 0.04, 4, 8]} />
         <meshStandardMaterial color={lipCol} />
       </mesh>
 
       {/* ===== BLUSH ===== */}
-      <mesh position={[-0.16, 1.55, 0.22]} rotation={[0, -0.6, 0]}>
-        <circleGeometry args={[0.03, 12]} />
+      <mesh position={[-0.18, 1.56, 0.21]} rotation={[0, -0.7, 0]}>
+        <circleGeometry args={[0.035, 12]} />
         <meshStandardMaterial
           color={blushCol}
           transparent
-          opacity={0.3}
+          opacity={0.35}
           side={THREE.DoubleSide}
         />
       </mesh>
-      <mesh position={[0.16, 1.55, 0.22]} rotation={[0, 0.6, 0]}>
-        <circleGeometry args={[0.03, 12]} />
+      <mesh position={[0.18, 1.56, 0.21]} rotation={[0, 0.7, 0]}>
+        <circleGeometry args={[0.035, 12]} />
         <meshStandardMaterial
           color={blushCol}
           transparent
-          opacity={0.3}
+          opacity={0.35}
           side={THREE.DoubleSide}
         />
       </mesh>
 
-      {/* ===== HAIR: base shell (same center as head, wraps around top) ===== */}
+      {/* ===== HAIR: base shell (covers top of head, stops above face) ===== */}
       <mesh position={[0, 1.6, 0]} castShadow>
         <sphereGeometry
-          args={[0.30, 24, 24, 0, Math.PI * 2, 0, Math.PI * 0.55]}
+          args={[0.30, 24, 24, 0, Math.PI * 2, 0, Math.PI * 0.40]}
         />
         <meshStandardMaterial color={hairCol} roughness={0.5} />
       </mesh>
-      {/* Bangs fringe */}
+      {/* Side hair covers ears */}
+      <mesh position={[-0.24, 1.62, -0.04]} scale={[0.45, 0.8, 0.5]} castShadow>
+        <capsuleGeometry args={[0.12, 0.12, 6, 8]} />
+        <meshStandardMaterial color={hairCol} roughness={0.5} />
+      </mesh>
+      <mesh position={[0.24, 1.62, -0.04]} scale={[0.45, 0.8, 0.5]} castShadow>
+        <capsuleGeometry args={[0.12, 0.12, 6, 8]} />
+        <meshStandardMaterial color={hairCol} roughness={0.5} />
+      </mesh>
+      {/* Back of head hair */}
+      <mesh position={[0, 1.58, -0.18]} scale={[0.9, 0.85, 0.5]} castShadow>
+        <sphereGeometry args={[0.26, 16, 16]} />
+        <meshStandardMaterial color={hairCol} roughness={0.5} />
+      </mesh>
+      {/* Bangs fringe on forehead */}
       <mesh
-        position={[0, 1.72, 0.2]}
-        rotation={[-0.8, 0, 0]}
-        scale={[1.15, 1, 0.5]}
+        position={[0, 1.73, 0.2]}
+        rotation={[-0.6, 0, 0]}
+        scale={[1.3, 0.5, 0.3]}
       >
-        <capsuleGeometry args={[0.08, 0.1, 6, 12]} />
+        <capsuleGeometry args={[0.08, 0.06, 6, 12]} />
         <meshStandardMaterial color={hairCol} roughness={0.5} />
       </mesh>
 
@@ -358,12 +378,11 @@ function Avatar3D({
             <capsuleGeometry args={[0.20, 0.5, 6, 12]} />
             <meshStandardMaterial color={hairCol} roughness={0.55} />
           </mesh>
-          {/* Side hair framing face */}
-          <mesh position={[-0.2, 1.4, 0.08]} scale={[0.4, 1, 0.4]} castShadow>
+          <mesh position={[-0.22, 1.4, 0.08]} scale={[0.4, 1, 0.4]} castShadow>
             <capsuleGeometry args={[0.08, 0.35, 6, 8]} />
             <meshStandardMaterial color={hairCol} roughness={0.55} />
           </mesh>
-          <mesh position={[0.2, 1.4, 0.08]} scale={[0.4, 1, 0.4]} castShadow>
+          <mesh position={[0.22, 1.4, 0.08]} scale={[0.4, 1, 0.4]} castShadow>
             <capsuleGeometry args={[0.08, 0.35, 6, 8]} />
             <meshStandardMaterial color={hairCol} roughness={0.55} />
           </mesh>
@@ -387,16 +406,16 @@ function Avatar3D({
         </>
       )}
       {hr === "bob" && (
-        <mesh
-          position={[0, 1.5, -0.02]}
-          scale={[1.12, 0.9, 1.1]}
-          castShadow
-        >
-          <sphereGeometry
-            args={[0.30, 24, 24, 0, Math.PI * 2, 0, Math.PI * 0.7]}
-          />
-          <meshStandardMaterial color={hairCol} roughness={0.5} />
-        </mesh>
+        <>
+          <mesh position={[-0.25, 1.5, 0.02]} scale={[0.5, 0.9, 0.5]} castShadow>
+            <capsuleGeometry args={[0.1, 0.2, 6, 8]} />
+            <meshStandardMaterial color={hairCol} roughness={0.5} />
+          </mesh>
+          <mesh position={[0.25, 1.5, 0.02]} scale={[0.5, 0.9, 0.5]} castShadow>
+            <capsuleGeometry args={[0.1, 0.2, 6, 8]} />
+            <meshStandardMaterial color={hairCol} roughness={0.5} />
+          </mesh>
+        </>
       )}
       {hr === "twin-buns" && (
         <>
@@ -555,8 +574,8 @@ function Avatar3D({
       {/* ===== ACCESSORIES ===== */}
       {avatar.parts.accessory === "neon-shades" && (
         <>
-          <mesh position={[-0.09, 1.63, 0.27]}>
-            <boxGeometry args={[0.08, 0.04, 0.01]} />
+          <mesh position={[-0.09, 1.63, 0.33]}>
+            <boxGeometry args={[0.09, 0.045, 0.012]} />
             <meshStandardMaterial
               color="#111"
               emissive="#ff3d8b"
@@ -564,8 +583,8 @@ function Avatar3D({
               toneMapped={false}
             />
           </mesh>
-          <mesh position={[0.09, 1.63, 0.27]}>
-            <boxGeometry args={[0.08, 0.04, 0.01]} />
+          <mesh position={[0.09, 1.63, 0.33]}>
+            <boxGeometry args={[0.09, 0.045, 0.012]} />
             <meshStandardMaterial
               color="#111"
               emissive="#ff3d8b"
@@ -573,15 +592,24 @@ function Avatar3D({
               toneMapped={false}
             />
           </mesh>
-          <mesh position={[0, 1.63, 0.27]}>
-            <boxGeometry args={[0.04, 0.01, 0.01]} />
+          <mesh position={[0, 1.63, 0.33]}>
+            <boxGeometry args={[0.04, 0.012, 0.012]} />
             <meshStandardMaterial color="#111" />
+          </mesh>
+          {/* Temples (arms of glasses) */}
+          <mesh position={[-0.16, 1.63, 0.3]} rotation={[0, 0.8, 0]}>
+            <boxGeometry args={[0.12, 0.012, 0.012]} />
+            <meshStandardMaterial color="#ff3d8b" />
+          </mesh>
+          <mesh position={[0.16, 1.63, 0.3]} rotation={[0, -0.8, 0]}>
+            <boxGeometry args={[0.12, 0.012, 0.012]} />
+            <meshStandardMaterial color="#ff3d8b" />
           </mesh>
         </>
       )}
       {avatar.parts.accessory === "cyber-visor" && (
-        <mesh position={[0, 1.63, 0.26]}>
-          <boxGeometry args={[0.28, 0.045, 0.015]} />
+        <mesh position={[0, 1.63, 0.32]}>
+          <boxGeometry args={[0.3, 0.05, 0.018]} />
           <meshStandardMaterial
             color="#001133"
             emissive="#00aaff"
@@ -605,8 +633,8 @@ function Avatar3D({
       )}
       {avatar.parts.accessory === "hologram-earring" && (
         <>
-          <mesh position={[-0.26, 1.55, 0.02]}>
-            <sphereGeometry args={[0.025, 8, 8]} />
+          <mesh position={[-0.28, 1.55, 0.02]}>
+            <sphereGeometry args={[0.03, 8, 8]} />
             <meshStandardMaterial
               color="#88ffff"
               emissive="#88ffff"
@@ -614,8 +642,8 @@ function Avatar3D({
               toneMapped={false}
             />
           </mesh>
-          <mesh position={[0.26, 1.55, 0.02]}>
-            <sphereGeometry args={[0.025, 8, 8]} />
+          <mesh position={[0.28, 1.55, 0.02]}>
+            <sphereGeometry args={[0.03, 8, 8]} />
             <meshStandardMaterial
               color="#88ffff"
               emissive="#88ffff"
@@ -637,8 +665,8 @@ function Avatar3D({
         </mesh>
       )}
       {avatar.parts.accessory === "face-decal" && (
-        <mesh position={[0.15, 1.58, 0.22]} rotation={[0, 0.4, 0.2]}>
-          <planeGeometry args={[0.05, 0.05]} />
+        <mesh position={[0.16, 1.58, 0.26]} rotation={[0, 0.5, 0.2]}>
+          <planeGeometry args={[0.06, 0.06]} />
           <meshStandardMaterial
             color="#ff66aa"
             emissive="#ff66aa"
