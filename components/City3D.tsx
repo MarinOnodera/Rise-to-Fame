@@ -145,12 +145,12 @@ function CameraDragArea({
 // ===== 3D アバター (UserAvatar の色相を反映したローポリ) =====
 function Avatar3D({
   avatar,
-  walkPhase,
-  walkSpeed,
+  walkPhaseRef,
+  walkSpeedRef,
 }: {
   avatar: UserAvatar;
-  walkPhase: number;
-  walkSpeed: number;
+  walkPhaseRef: React.MutableRefObject<number>;
+  walkSpeedRef: React.MutableRefObject<number>;
 }) {
   const skin = useMemo(
     () => new THREE.Color(`hsl(${avatar.skinHue}, 50%, 70%)`),
@@ -184,21 +184,49 @@ function Avatar3D({
   const BLACK = useMemo(() => new THREE.Color("#111"), []);
   const blushCol = useMemo(() => new THREE.Color("hsl(0,50%,75%)"), []);
 
-  const s = walkSpeed;
-  const p = walkPhase;
-  const sinP = Math.sin(p);
+  const bodyRef = useRef<THREE.Group>(null);
+  const hipRRef = useRef<THREE.Group>(null);
+  const hipLRef = useRef<THREE.Group>(null);
+  const kneeRRef = useRef<THREE.Group>(null);
+  const kneeLRef = useRef<THREE.Group>(null);
+  const shoulderRRef = useRef<THREE.Group>(null);
+  const shoulderLRef = useRef<THREE.Group>(null);
+  const elbowRRef = useRef<THREE.Group>(null);
+  const elbowLRef = useRef<THREE.Group>(null);
 
-  const bodyBob = s * (1 - Math.cos(p * 2)) * 0.02;
-  const bodyLean = s * 0.06;
-  const bodySideRoll = s * sinP * 0.025;
-  const hipR = s * sinP * 0.5;
-  const hipL = -s * sinP * 0.5;
-  const kneeR = s * Math.pow(Math.max(0, sinP), 1.5) * 0.9;
-  const kneeL = s * Math.pow(Math.max(0, -sinP), 1.5) * 0.9;
-  const shoulderR = -s * sinP * 0.45;
-  const shoulderL = s * sinP * 0.45;
-  const elbowR = -s * (0.15 + Math.max(0, -sinP) * 0.4);
-  const elbowL = -s * (0.15 + Math.max(0, sinP) * 0.4);
+  useFrame(() => {
+    const s = walkSpeedRef.current;
+    const p = walkPhaseRef.current;
+    const sinP = Math.sin(p);
+
+    if (bodyRef.current) {
+      bodyRef.current.position.y = s * (1 - Math.cos(p * 2)) * 0.02;
+      bodyRef.current.rotation.x = s * 0.06;
+      bodyRef.current.rotation.z = s * sinP * 0.025;
+    }
+    if (hipRRef.current) hipRRef.current.rotation.x = s * sinP * 0.5;
+    if (hipLRef.current) hipLRef.current.rotation.x = -s * sinP * 0.5;
+    if (kneeRRef.current)
+      kneeRRef.current.rotation.x =
+        s * Math.pow(Math.max(0, sinP), 1.5) * 0.9;
+    if (kneeLRef.current)
+      kneeLRef.current.rotation.x =
+        s * Math.pow(Math.max(0, -sinP), 1.5) * 0.9;
+    if (shoulderRRef.current) {
+      shoulderRRef.current.rotation.x = -s * sinP * 0.45;
+      shoulderRRef.current.rotation.z = 0.12;
+    }
+    if (shoulderLRef.current) {
+      shoulderLRef.current.rotation.x = s * sinP * 0.45;
+      shoulderLRef.current.rotation.z = -0.12;
+    }
+    if (elbowRRef.current)
+      elbowRRef.current.rotation.x =
+        -s * (0.15 + Math.max(0, -sinP) * 0.4);
+    if (elbowLRef.current)
+      elbowLRef.current.rotation.x =
+        -s * (0.15 + Math.max(0, sinP) * 0.4);
+  });
 
   const eyeScaleW: Record<string, number> = {
     almond: 1, round: 1, sharp: 1.3, droopy: 1.05, cat: 1.2, wide: 1.1,
@@ -211,7 +239,7 @@ function Avatar3D({
   const hr = avatar.parts.hair;
 
   return (
-    <group position={[0, bodyBob, 0]} rotation={[bodyLean, 0, bodySideRoll]}>
+    <group ref={bodyRef}>
       {/* ===== HEAD ===== */}
       <mesh position={[0, 1.6, 0]} castShadow>
         <sphereGeometry args={[0.28, 32, 32]} />
@@ -442,7 +470,7 @@ function Avatar3D({
 
       {/* ===== ARMS ===== */}
       <group position={[0.27, 1.4, 0]}>
-        <group rotation={[shoulderR, 0, 0.12]}>
+        <group ref={shoulderRRef}>
           <mesh position={[0, -0.125, 0]} castShadow>
             <boxGeometry args={[0.12, 0.25, 0.12]} />
             <meshStandardMaterial
@@ -452,7 +480,7 @@ function Avatar3D({
             />
           </mesh>
           <group position={[0, -0.25, 0]}>
-            <group rotation={[elbowR, 0, 0]}>
+            <group ref={elbowRRef}>
               <mesh position={[0, -0.125, 0]}>
                 <boxGeometry args={[0.11, 0.25, 0.11]} />
                 <meshStandardMaterial color={skin} />
@@ -462,7 +490,7 @@ function Avatar3D({
         </group>
       </group>
       <group position={[-0.27, 1.4, 0]}>
-        <group rotation={[shoulderL, 0, -0.12]}>
+        <group ref={shoulderLRef}>
           <mesh position={[0, -0.125, 0]} castShadow>
             <boxGeometry args={[0.12, 0.25, 0.12]} />
             <meshStandardMaterial
@@ -472,7 +500,7 @@ function Avatar3D({
             />
           </mesh>
           <group position={[0, -0.25, 0]}>
-            <group rotation={[elbowL, 0, 0]}>
+            <group ref={elbowLRef}>
               <mesh position={[0, -0.125, 0]}>
                 <boxGeometry args={[0.11, 0.25, 0.11]} />
                 <meshStandardMaterial color={skin} />
@@ -484,13 +512,13 @@ function Avatar3D({
 
       {/* ===== LEGS ===== */}
       <group position={[0.12, 0.82, 0]}>
-        <group rotation={[hipR, 0, 0]}>
+        <group ref={hipRRef}>
           <mesh position={[0, -0.18, 0]} castShadow>
             <boxGeometry args={[0.16, 0.36, 0.16]} />
             <meshStandardMaterial color={outB} />
           </mesh>
           <group position={[0, -0.36, 0]}>
-            <group rotation={[kneeR, 0, 0]}>
+            <group ref={kneeRRef}>
               <mesh position={[0, -0.18, 0]} castShadow>
                 <boxGeometry args={[0.14, 0.36, 0.14]} />
                 <meshStandardMaterial color={outB} />
@@ -504,13 +532,13 @@ function Avatar3D({
         </group>
       </group>
       <group position={[-0.12, 0.82, 0]}>
-        <group rotation={[hipL, 0, 0]}>
+        <group ref={hipLRef}>
           <mesh position={[0, -0.18, 0]} castShadow>
             <boxGeometry args={[0.16, 0.36, 0.16]} />
             <meshStandardMaterial color={outB} />
           </mesh>
           <group position={[0, -0.36, 0]}>
-            <group rotation={[kneeL, 0, 0]}>
+            <group ref={kneeLRef}>
               <mesh position={[0, -0.18, 0]} castShadow>
                 <boxGeometry args={[0.14, 0.36, 0.14]} />
                 <meshStandardMaterial color={outB} />
@@ -2483,7 +2511,7 @@ function Player({
 
   return (
     <group ref={groupRef}>
-      <Avatar3D avatar={avatar} walkPhase={walkRef.current} walkSpeed={walkSpeedRef.current} />
+      <Avatar3D avatar={avatar} walkPhaseRef={walkRef} walkSpeedRef={walkSpeedRef} />
     </group>
   );
 }
