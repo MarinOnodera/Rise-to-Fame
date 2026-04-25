@@ -1957,7 +1957,7 @@ export interface BuildingBox {
   h: number;
   hue: number;
   label?: string;
-  type?: "normal" | "concert" | "cafe" | "shop" | "agency" | "residence" | "station";
+  type?: "normal" | "concert" | "cafe" | "shop" | "station";
   skyline?: boolean;
 }
 
@@ -1979,8 +1979,8 @@ export function makeBuildings(): BuildingBox[] {
     { label: "FLOURISH BAKERY", type: "cafe" },
     { label: "☕ Coffee Culture", type: "cafe" },
     { label: "🛍️ IDOL SHOP", type: "shop" },
-    { label: "🏢 AGENCY", type: "agency" },
-    { label: "🏠 Residence", type: "residence" },
+    { label: "🏢 AGENCY" },
+    { label: "🎶 K-Dance Studio" },
     { label: "🎵 LIVE HOUSE" },
     { label: "📺 MBC Studio" },
     { label: "🎧 Recording" },
@@ -1989,7 +1989,7 @@ export function makeBuildings(): BuildingBox[] {
     { label: "📱 NEOFOLD" },
     { label: "🧋 PIKO SODA" },
     { label: "🎮 Game Center" },
-    { label: "👗 Atelier", type: "agency" },
+    { label: "👗 Atelier" },
     { label: "✨ MarinLuna HQ" },
     { label: "📡 Media Tower" },
     { label: "🐱 Cat Cafe", type: "cafe" },
@@ -2394,8 +2394,6 @@ function City() {
 
       <AreaSign x={150}  z={-150} text="🎤 엔터테인먼트" rotY={0} />
       <AreaSign x={150}  z={150}  text="🛍️ 쇼핑거리" rotY={0} />
-      <AreaSign x={-150} z={-150} text="🏢 에이전시" rotY={0} />
-      <AreaSign x={-150} z={150}  text="🏠 주거지역" rotY={0} />
 
       {buildings.map((b, i) => (
         <Building key={`fg${i}`} {...b} />
