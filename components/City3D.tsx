@@ -803,225 +803,166 @@ function PhotoHall() {
 }
 
 // ===== ビル (カラフル低層 – Roblox / Zootopia 風) =====
+const _facadeTexCache = new Map<string, THREE.CanvasTexture>();
+function getOrCreateFacadeTex(qw: number, qh: number, hue: number, label?: string): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const key = `${qw}_${qh}_${hue}_${label || ""}`;
+  const cached = _facadeTexCache.get(key);
+  if (cached) return cached;
+
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  const rng = mulberry32(Math.floor(qw * 1000 + qh * 100 + hue));
+  ctx.fillStyle = `hsl(${hue}, 35%, 72%)`;
+  ctx.fillRect(0, 0, 256, 256);
+  const floors = Math.max(1, qh);
+  const cols = Math.max(2, qw);
+  const fH = 256 / floors;
+  const fW = 256 / cols;
+  const pad = 6;
+  for (let fy = 0; fy < floors; fy++) {
+    for (let fx = 0; fx < cols; fx++) {
+      const lit = rng() > 0.2;
+      const tint = Math.floor(rng() * 3);
+      ctx.fillStyle = lit
+        ? (tint === 0 ? "hsl(210, 40%, 75%)" : tint === 1 ? "hsl(200, 30%, 82%)" : "hsl(220, 25%, 68%)")
+        : "hsl(210, 20%, 60%)";
+      const wx = fx * fW + pad + 2;
+      const wy = fy * fH + pad + 2;
+      const ww = fW - pad * 2 - 4;
+      const wh = fH - pad * 2 - 4;
+      ctx.fillRect(wx, wy, ww, wh);
+      ctx.strokeStyle = `hsl(${hue}, 20%, 50%)`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(wx - 1, wy - 1, ww + 2, wh + 2);
+    }
+    ctx.fillStyle = `hsl(${hue}, 25%, 62%)`;
+    ctx.fillRect(0, fy * fH, 256, 3);
+  }
+  if (label) {
+    ctx.fillStyle = `hsl(${(hue + 60) % 360}, 50%, 35%)`;
+    ctx.fillRect(0, 0, 256, fH * 0.7);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 28px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, 128, fH * 0.35);
+  }
+  const doorW = 38;
+  const doorH = fH * 0.85;
+  const dx = 128 - doorW / 2;
+  const dy = 256 - doorH;
+  ctx.fillStyle = `hsl(${(hue + 120) % 360}, 30%, 35%)`;
+  ctx.fillRect(dx, dy, doorW, doorH);
+  ctx.strokeStyle = `hsl(${(hue + 120) % 360}, 20%, 25%)`;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(dx, dy, doorW, doorH);
+  ctx.fillStyle = "#ddd";
+  ctx.fillRect(dx + doorW * 0.75, dy + doorH * 0.5, 4, 4);
+  ctx.fillStyle = `hsl(${(hue + 60) % 360}, 30%, 45%)`;
+  ctx.fillRect(128 - (doorW + 14) / 2, dy - 8, doorW + 14, 8);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  _facadeTexCache.set(key, t);
+  return t;
+}
+
 function Building({
   x, z, w, d, h, hue, label, type, skyline, doorDir,
 }: BuildingBox) {
   const wallCol = useMemo(() => new THREE.Color(`hsl(${hue}, 35%, 72%)`), [hue]);
   const trimCol = useMemo(() => new THREE.Color(`hsl(${(hue + 30) % 360}, 40%, 55%)`), [hue]);
   const roofCol = useMemo(() => new THREE.Color(`hsl(${(hue + 60) % 360}, 30%, 45%)`), [hue]);
-  const doorCol = useMemo(() => new THREE.Color(`hsl(${(hue + 120) % 360}, 30%, 35%)`), [hue]);
 
-  const makeFaceTex = useCallback((faceW: number, faceH: number, showLabel: boolean, showDoor: boolean) => {
-    if (typeof document === "undefined") return null;
-    const c = document.createElement("canvas");
-    c.width = 256;
-    c.height = 256;
-    const ctx = c.getContext("2d");
-    if (!ctx) return null;
-    const rng = mulberry32(Math.floor(faceW * 1000 + faceH * 100 + d * 10 + hue + (showDoor ? 7 : 0)));
-    ctx.fillStyle = `hsl(${hue}, 35%, 72%)`;
-    ctx.fillRect(0, 0, 256, 256);
-    const floors = Math.max(1, Math.round(faceH / 4));
-    const cols = Math.max(2, Math.round(faceW / 3));
-    const fH = 256 / floors;
-    const fW = 256 / cols;
-    const pad = 6;
-    for (let fy = 0; fy < floors; fy++) {
-      for (let fx = 0; fx < cols; fx++) {
-        const lit = rng() > 0.2;
-        const tint = Math.floor(rng() * 3);
-        ctx.fillStyle = lit
-          ? (tint === 0 ? "hsl(210, 40%, 75%)" : tint === 1 ? "hsl(200, 30%, 82%)" : "hsl(220, 25%, 68%)")
-          : "hsl(210, 20%, 60%)";
-        const wx = fx * fW + pad + 2;
-        const wy = fy * fH + pad + 2;
-        const ww = fW - pad * 2 - 4;
-        const wh = fH - pad * 2 - 4;
-        ctx.fillRect(wx, wy, ww, wh);
-        ctx.strokeStyle = `hsl(${hue}, 20%, 50%)`;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(wx - 1, wy - 1, ww + 2, wh + 2);
-      }
-      ctx.fillStyle = `hsl(${hue}, 25%, 62%)`;
-      ctx.fillRect(0, fy * fH, 256, 3);
-    }
-    if (showLabel && label) {
-      ctx.fillStyle = `hsl(${(hue + 60) % 360}, 50%, 35%)`;
-      ctx.fillRect(0, 0, 256, fH * 0.7);
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 28px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, 128, fH * 0.35);
-    }
-    if (showDoor) {
-      const doorW = 38;
-      const doorH = fH * 0.85;
-      const dx = 128 - doorW / 2;
-      const dy = 256 - doorH;
-      ctx.fillStyle = `hsl(${(hue + 120) % 360}, 30%, 35%)`;
-      ctx.fillRect(dx, dy, doorW, doorH);
-      ctx.strokeStyle = `hsl(${(hue + 120) % 360}, 20%, 25%)`;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(dx, dy, doorW, doorH);
-      ctx.fillStyle = "#ddd";
-      ctx.fillRect(dx + doorW * 0.75, dy + doorH * 0.5, 4, 4);
-      ctx.fillStyle = `hsl(${(hue + 60) % 360}, 30%, 45%)`;
-      const frameW = doorW + 14;
-      ctx.fillRect(128 - frameW / 2, dy - 8, frameW, 8);
-    }
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, [d, hue, label]);
+  // Quantize to enable texture sharing
+  const qFloors = Math.max(1, Math.round(h / 4));
+  const qCols = Math.max(2, Math.round(w / 3));
+  const faceTex = useMemo(
+    () => getOrCreateFacadeTex(qCols, qFloors, hue, label),
+    [qCols, qFloors, hue, label],
+  );
 
-  const frontTex = useMemo(() => makeFaceTex(w, h, true, doorDir === "south" || !doorDir), [makeFaceTex, w, h, doorDir]);
-  const backTex = useMemo(() => makeFaceTex(w, h, false, doorDir === "north"), [makeFaceTex, w, h, doorDir]);
-  const leftTex = useMemo(() => makeFaceTex(d, h, false, doorDir === "west"), [makeFaceTex, d, h, doorDir]);
-  const rightTex = useMemo(() => makeFaceTex(d, h, false, doorDir === "east"), [makeFaceTex, d, h, doorDir]);
-
-  const floors = Math.max(1, Math.round(h / 4));
-  const isLow = h <= 10;
+  // Determine which face is the entrance (gets the door texture)
+  const entranceFace = doorDir || "south";
 
   return (
     <group position={[x, 0, z]}>
+      {/* Main box */}
       <mesh position={[0, h / 2, 0]} castShadow={!skyline} receiveShadow={!skyline}>
         <boxGeometry args={[w, h, d]} />
         <meshStandardMaterial color={wallCol} roughness={0.75} metalness={0.05} />
       </mesh>
-      {/* 4 face textures with windows, labels, and doors */}
-      {frontTex && !skyline && (
+      {/* Entrance face (with door + label texture) */}
+      {faceTex && !skyline && entranceFace === "south" && (
         <mesh position={[0, h / 2, d / 2 + 0.02]}>
           <planeGeometry args={[w * 0.96, h * 0.97]} />
-          <meshStandardMaterial map={frontTex} roughness={0.6} />
+          <meshStandardMaterial map={faceTex} roughness={0.6} />
         </mesh>
       )}
-      {backTex && !skyline && (
+      {faceTex && !skyline && entranceFace === "north" && (
         <mesh position={[0, h / 2, -d / 2 - 0.02]} rotation={[0, Math.PI, 0]}>
           <planeGeometry args={[w * 0.96, h * 0.97]} />
-          <meshStandardMaterial map={backTex} roughness={0.6} />
+          <meshStandardMaterial map={faceTex} roughness={0.6} />
         </mesh>
       )}
-      {leftTex && !skyline && (
+      {faceTex && !skyline && entranceFace === "west" && (
         <mesh position={[-w / 2 - 0.02, h / 2, 0]} rotation={[0, -Math.PI / 2, 0]}>
           <planeGeometry args={[d * 0.96, h * 0.97]} />
-          <meshStandardMaterial map={leftTex} roughness={0.6} />
+          <meshStandardMaterial map={faceTex} roughness={0.6} />
         </mesh>
       )}
-      {rightTex && !skyline && (
+      {faceTex && !skyline && entranceFace === "east" && (
         <mesh position={[w / 2 + 0.02, h / 2, 0]} rotation={[0, Math.PI / 2, 0]}>
           <planeGeometry args={[d * 0.96, h * 0.97]} />
-          <meshStandardMaterial map={rightTex} roughness={0.6} />
+          <meshStandardMaterial map={faceTex} roughness={0.6} />
         </mesh>
       )}
-      {/* 3D door on the entrance face */}
-      {!skyline && doorDir && (
-        <BuildingDoor w={w} d={d} h={h} doorDir={doorDir} doorCol={doorCol} trimCol={trimCol} />
-      )}
-      {/* 屋根 */}
-      <mesh position={[0, h + 0.15, 0]} castShadow>
+      {/* Roof */}
+      <mesh position={[0, h + 0.15, 0]}>
         <boxGeometry args={[w + 0.3, 0.3, d + 0.3]} />
         <meshStandardMaterial color={roofCol} roughness={0.8} />
       </mesh>
-      {/* 1F awning on entrance side */}
+      {/* Awning on entrance side */}
       {!skyline && (
-        <BuildingAwning w={w} d={d} doorDir={doorDir} trimCol={trimCol} />
+        <mesh position={[
+          entranceFace === "east" ? w / 2 + 0.6 : entranceFace === "west" ? -w / 2 - 0.6 : 0,
+          4.2,
+          entranceFace === "south" ? d / 2 + 0.6 : entranceFace === "north" ? -d / 2 - 0.6 : 0,
+        ]}>
+          <boxGeometry args={[
+            (entranceFace === "east" || entranceFace === "west") ? 1.2 : w * 0.9,
+            0.12,
+            (entranceFace === "east" || entranceFace === "west") ? d * 0.9 : 1.2,
+          ]} />
+          <meshStandardMaterial color={trimCol} roughness={0.6} />
+        </mesh>
       )}
-      {/* 上部トリム */}
-      <mesh position={[0, h - 0.1, d / 2 + 0.04]}>
-        <boxGeometry args={[w + 0.15, 0.35, 0.1]} />
-        <meshStandardMaterial color={trimCol} roughness={0.7} />
-      </mesh>
-      <mesh position={[0, h - 0.1, -d / 2 - 0.04]}>
-        <boxGeometry args={[w + 0.15, 0.35, 0.1]} />
-        <meshStandardMaterial color={trimCol} roughness={0.7} />
-      </mesh>
-      {/* 1F 基礎帯 */}
+      {/* Top trim (entrance side only) */}
+      {!skyline && (
+        <mesh position={[
+          entranceFace === "east" ? w / 2 + 0.04 : entranceFace === "west" ? -w / 2 - 0.04 : 0,
+          h - 0.1,
+          entranceFace === "south" ? d / 2 + 0.04 : entranceFace === "north" ? -d / 2 - 0.04 : 0,
+        ]}>
+          <boxGeometry args={[
+            (entranceFace === "east" || entranceFace === "west") ? 0.1 : w + 0.15,
+            0.35,
+            (entranceFace === "east" || entranceFace === "west") ? d + 0.15 : 0.1,
+          ]} />
+          <meshStandardMaterial color={trimCol} roughness={0.7} />
+        </mesh>
+      )}
+      {/* Base strip */}
       {!skyline && (
         <mesh position={[0, 0.3, 0]}>
           <boxGeometry args={[w + 0.2, 0.6, d + 0.2]} />
           <meshStandardMaterial color={roofCol} roughness={0.85} />
         </mesh>
       )}
-      {/* バルコニー (3F+) */}
-      {!skyline && floors >= 3 && (
-        <mesh position={[0, 8.2, d / 2 + 0.4]}>
-          <boxGeometry args={[w * 0.7, 0.1, 0.8]} />
-          <meshStandardMaterial color={wallCol} roughness={0.7} />
-        </mesh>
-      )}
-      {/* 低層ビルにはパラペット壁 */}
-      {!skyline && isLow && (
-        <>
-          <mesh position={[0, h + 0.5, d / 2]}>
-            <boxGeometry args={[w + 0.3, 0.8, 0.15]} />
-            <meshStandardMaterial color={trimCol} roughness={0.7} />
-          </mesh>
-          <mesh position={[0, h + 0.5, -d / 2]}>
-            <boxGeometry args={[w + 0.3, 0.8, 0.15]} />
-            <meshStandardMaterial color={trimCol} roughness={0.7} />
-          </mesh>
-        </>
-      )}
-      {/* 屋上ユニット (高いビルのみ) */}
-      {!skyline && h > 20 && (
-        <mesh position={[w * 0.2, h + 0.8, -d * 0.15]}>
-          <boxGeometry args={[1.8, 1.2, 1.8]} />
-          <meshStandardMaterial color="#999" roughness={0.8} />
-        </mesh>
-      )}
     </group>
-  );
-}
-
-function BuildingDoor({ w, d, h, doorDir, doorCol, trimCol }: {
-  w: number; d: number; h: number;
-  doorDir: "north" | "south" | "east" | "west";
-  doorCol: THREE.Color; trimCol: THREE.Color;
-}) {
-  const dw = 1.4;
-  const dh = 2.8;
-  let px = 0, pz = 0, ry = 0;
-  if (doorDir === "south") { pz = d / 2 + 0.04; ry = 0; }
-  else if (doorDir === "north") { pz = -d / 2 - 0.04; ry = Math.PI; }
-  else if (doorDir === "east") { px = w / 2 + 0.04; ry = Math.PI / 2; }
-  else { px = -w / 2 - 0.04; ry = -Math.PI / 2; }
-  return (
-    <group position={[px, 0, pz]} rotation={[0, ry, 0]}>
-      <mesh position={[0, dh / 2, 0]}>
-        <boxGeometry args={[dw, dh, 0.08]} />
-        <meshStandardMaterial color={doorCol} roughness={0.6} />
-      </mesh>
-      {/* frame */}
-      <mesh position={[0, dh + 0.15, 0]}>
-        <boxGeometry args={[dw + 0.4, 0.3, 0.12]} />
-        <meshStandardMaterial color={trimCol} roughness={0.6} />
-      </mesh>
-      {/* handle */}
-      <mesh position={[0.45, dh * 0.45, 0.06]}>
-        <sphereGeometry args={[0.06, 6, 6]} />
-        <meshStandardMaterial color="#ccc" metalness={0.8} roughness={0.2} />
-      </mesh>
-    </group>
-  );
-}
-
-function BuildingAwning({ w, d, doorDir, trimCol }: {
-  w: number; d: number;
-  doorDir?: "north" | "south" | "east" | "west";
-  trimCol: THREE.Color;
-}) {
-  const dir = doorDir || "south";
-  let px = 0, pz = 0, ry = 0, aw = w;
-  if (dir === "south") { pz = d / 2 + 0.6; ry = 0; aw = w; }
-  else if (dir === "north") { pz = -d / 2 - 0.6; ry = 0; aw = w; }
-  else if (dir === "east") { px = w / 2 + 0.6; ry = Math.PI / 2; aw = d; }
-  else { px = -w / 2 - 0.6; ry = Math.PI / 2; aw = d; }
-  return (
-    <mesh position={[px, 4.2, pz]} rotation={[0, ry, 0]}>
-      <boxGeometry args={[aw * 0.9, 0.12, 1.2]} />
-      <meshStandardMaterial color={trimCol} roughness={0.6} />
-    </mesh>
   );
 }
 
@@ -1704,7 +1645,7 @@ function WaterBody() {
   const rocks = useMemo(() => {
     const rng = mulberry32(777);
     const out: { x: number; z: number; s: number; ry: number }[] = [];
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 12; i++) {
       out.push({
         x: -500 + rng() * 1000,
         z: 295 + rng() * 8,
@@ -1745,19 +1686,17 @@ function WaterBody() {
         <boxGeometry args={[1400, 0.8, 4]} />
         <meshStandardMaterial color="#8a7b6b" roughness={0.85} />
       </mesh>
-      {/* Boardwalk railing */}
-      {Array.from({ length: 40 }).map((_, i) => (
-        <group key={`rail${i}`}>
-          <mesh position={[-600 + i * 30, 1.0, 276.5]}>
-            <cylinderGeometry args={[0.06, 0.06, 1.4, 4]} />
-            <meshStandardMaterial color="#555" metalness={0.6} roughness={0.3} />
-          </mesh>
-        </group>
-      ))}
+      {/* Boardwalk railing (single rail bar + sparse posts) */}
       <mesh position={[0, 1.5, 276.5]}>
         <boxGeometry args={[1400, 0.06, 0.12]} />
         <meshStandardMaterial color="#555" metalness={0.6} roughness={0.3} />
       </mesh>
+      {Array.from({ length: 14 }).map((_, i) => (
+        <mesh key={`rp${i}`} position={[-600 + i * 90, 1.0, 276.5]}>
+          <cylinderGeometry args={[0.06, 0.06, 1.4, 4]} />
+          <meshStandardMaterial color="#555" metalness={0.6} roughness={0.3} />
+        </mesh>
+      ))}
       {/* Shore rocks */}
       {rocks.map((r, i) => (
         <mesh key={`rock${i}`} position={[r.x, r.s * 0.3, r.z]} rotation={[0, r.ry, 0]}>
@@ -2092,32 +2031,27 @@ function PalmTree({ x, z, scale = 1 }: { x: number; z: number; scale?: number })
   const trunkH = 8 + rng() * 6;
   const lean = (rng() - 0.5) * 0.15;
   const frondHue = 95 + Math.floor(rng() * 30);
+  const frondCol = `hsl(${frondHue}, 55%, 35%)`;
   return (
     <group position={[x, 0, z]} scale={scale}>
       <mesh position={[lean * trunkH * 0.5, trunkH / 2, 0]} rotation={[0, 0, lean]} castShadow>
-        <cylinderGeometry args={[0.15, 0.25, trunkH, 6]} />
+        <cylinderGeometry args={[0.15, 0.25, trunkH, 5]} />
         <meshStandardMaterial color="#8b6914" roughness={0.9} />
       </mesh>
-      {Array.from({ length: 7 }).map((_, i) => {
-        const a = (i / 7) * Math.PI * 2 + rng() * 0.3;
-        const frondLen = 3.5 + rng() * 1.5;
+      {/* 4 fronds instead of 7 */}
+      {[0, 1, 2, 3].map((i) => {
+        const a = (i / 4) * Math.PI * 2 + rng() * 0.5;
+        const fl = 3.5 + rng() * 1.5;
         return (
-          <mesh
-            key={i}
-            position={[
-              lean * trunkH + Math.cos(a) * frondLen * 0.4,
-              trunkH + 0.3 - Math.abs(Math.sin(a)) * 0.5,
-              Math.sin(a) * frondLen * 0.4,
-            ]}
-            rotation={[Math.sin(a) * 0.6, a, Math.cos(a) * 0.4]}
-          >
-            <boxGeometry args={[0.4, 0.06, frondLen]} />
-            <meshStandardMaterial color={`hsl(${frondHue}, 55%, 35%)`} roughness={0.8} />
+          <mesh key={i} position={[lean * trunkH + Math.cos(a) * fl * 0.4, trunkH + 0.3, Math.sin(a) * fl * 0.4]}
+            rotation={[Math.sin(a) * 0.6, a, Math.cos(a) * 0.4]}>
+            <boxGeometry args={[0.5, 0.06, fl]} />
+            <meshStandardMaterial color={frondCol} roughness={0.8} />
           </mesh>
         );
       })}
       <mesh position={[lean * trunkH, trunkH + 0.5, 0]}>
-        <sphereGeometry args={[0.6, 8, 6]} />
+        <sphereGeometry args={[0.5, 6, 5]} />
         <meshStandardMaterial color={`hsl(${frondHue}, 50%, 30%)`} roughness={0.8} />
       </mesh>
     </group>
@@ -2191,6 +2125,7 @@ export function makeBuildings(): BuildingBox[] {
 
   const swW = 3.5;
 
+  // Only line buildings along vertical roads (ROAD_XS), skip horizontal to reduce count
   for (const rx of ROAD_XS) {
     const rw = roadWidth(rx);
     const sides: Array<{ edgeX: number; doorDir: BuildingBox["doorDir"]; buildDir: number }> = [
@@ -2198,18 +2133,18 @@ export function makeBuildings(): BuildingBox[] {
       { edgeX: rx - rw / 2 - swW, doorDir: "east", buildDir: -1 },
     ];
     for (const side of sides) {
-      for (let bz = -400; bz <= 250;) {
+      for (let bz = -350; bz <= 250;) {
         if (Math.hypot(side.edgeX + side.buildDir * 5 - PLAZA_POS.x, bz - PLAZA_POS.z) < PLAZA_POS.radius + 10) {
-          bz += 8; continue;
+          bz += 12; continue;
         }
         if (Math.hypot(side.edgeX + side.buildDir * 5 - LUNA_DOME.x, bz - LUNA_DOME.z) < LUNA_DOME.radius + 18) {
-          bz += 8; continue;
+          bz += 12; continue;
         }
         const r = rng();
         const isLow = r < 0.35;
         const isTall = r > 0.85;
-        const bw = isLow ? (12 + rng() * 8) : isTall ? (8 + rng() * 4) : (7 + rng() * 5);
-        const bd = isLow ? (10 + rng() * 6) : (6 + rng() * 5);
+        const bw = isLow ? (14 + rng() * 10) : isTall ? (10 + rng() * 5) : (10 + rng() * 6);
+        const bd = isLow ? (10 + rng() * 6) : (7 + rng() * 5);
         const floors = isLow ? (1 + Math.floor(rng() * 2)) : isTall ? (8 + Math.floor(rng() * 12)) : (2 + Math.floor(rng() * 4));
         const h = floors * 4;
         const cx = side.edgeX + side.buildDir * (bd / 2 + 0.5);
@@ -2228,53 +2163,51 @@ export function makeBuildings(): BuildingBox[] {
           }
           out.push(bld);
         }
-        bz += bw + 1.5 + rng() * 2;
+        bz += bw + 4 + rng() * 5;
       }
     }
   }
 
-  for (const rz of ROAD_ZS) {
+  // Sparse buildings along horizontal roads (only inner 3 roads, one side each)
+  for (const rz of [ROAD_ZS[1], ROAD_ZS[2], ROAD_ZS[3]]) {
     const rw = roadWidth(rz);
-    const sides: Array<{ edgeZ: number; doorDir: BuildingBox["doorDir"]; buildDir: number }> = [
-      { edgeZ: rz + rw / 2 + swW, doorDir: "north", buildDir: 1 },
-      { edgeZ: rz - rw / 2 - swW, doorDir: "south", buildDir: -1 },
-    ];
-    for (const side of sides) {
-      for (let bx = -400; bx <= 400;) {
-        if (isOnRoad(bx, side.edgeZ + side.buildDir * 5)) {
-          bx += 8; continue;
-        }
-        if (Math.hypot(bx - PLAZA_POS.x, side.edgeZ + side.buildDir * 5 - PLAZA_POS.z) < PLAZA_POS.radius + 10) {
-          bx += 8; continue;
-        }
-        if (Math.hypot(bx - LUNA_DOME.x, side.edgeZ + side.buildDir * 5 - LUNA_DOME.z) < LUNA_DOME.radius + 18) {
-          bx += 8; continue;
-        }
-        const r = rng();
-        const isLow = r < 0.35;
-        const isTall = r > 0.85;
-        const bw = isLow ? (12 + rng() * 8) : isTall ? (8 + rng() * 4) : (7 + rng() * 5);
-        const bd = isLow ? (10 + rng() * 6) : (6 + rng() * 5);
-        const floors = isLow ? (1 + Math.floor(rng() * 2)) : isTall ? (8 + Math.floor(rng() * 12)) : (2 + Math.floor(rng() * 4));
-        const h = floors * 4;
-        const cz = side.edgeZ + side.buildDir * (bd / 2 + 0.5);
-        const cx = bx + bw / 2;
-
-        if (!overlapsAny(cx, cz, bw, bd + 1, out)) {
-          const bld: BuildingBox = {
-            x: cx, z: cz, w: bw, d: bd, h,
-            hue: pickHue(),
-            doorDir: side.doorDir,
-          };
-          if (labelIdx < labels.length) {
-            bld.label = labels[labelIdx].label;
-            bld.type = labels[labelIdx].type;
-            labelIdx++;
-          }
-          out.push(bld);
-        }
-        bx += bw + 1.5 + rng() * 2;
+    const buildDir = rz <= 0 ? 1 : -1;
+    const edgeZ = rz + (buildDir > 0 ? rw / 2 + swW : -rw / 2 - swW);
+    const doorDir: BuildingBox["doorDir"] = buildDir > 0 ? "north" : "south";
+    for (let bx = -350; bx <= 350;) {
+      if (isOnRoad(bx, edgeZ + buildDir * 5)) {
+        bx += 12; continue;
       }
+      if (Math.hypot(bx - PLAZA_POS.x, edgeZ + buildDir * 5 - PLAZA_POS.z) < PLAZA_POS.radius + 10) {
+        bx += 12; continue;
+      }
+      if (Math.hypot(bx - LUNA_DOME.x, edgeZ + buildDir * 5 - LUNA_DOME.z) < LUNA_DOME.radius + 18) {
+        bx += 12; continue;
+      }
+      const r = rng();
+      const isLow = r < 0.4;
+      const isTall = r > 0.8;
+      const bw = isLow ? (14 + rng() * 10) : isTall ? (10 + rng() * 5) : (10 + rng() * 6);
+      const bd = isLow ? (10 + rng() * 6) : (7 + rng() * 5);
+      const floors = isLow ? (1 + Math.floor(rng() * 2)) : isTall ? (6 + Math.floor(rng() * 10)) : (2 + Math.floor(rng() * 4));
+      const h = floors * 4;
+      const cz = edgeZ + buildDir * (bd / 2 + 0.5);
+      const cx = bx + bw / 2;
+
+      if (!overlapsAny(cx, cz, bw, bd + 1, out)) {
+        const bld: BuildingBox = {
+          x: cx, z: cz, w: bw, d: bd, h,
+          hue: pickHue(),
+          doorDir,
+        };
+        if (labelIdx < labels.length) {
+          bld.label = labels[labelIdx].label;
+          bld.type = labels[labelIdx].type;
+          labelIdx++;
+        }
+        out.push(bld);
+      }
+      bx += bw + 5 + rng() * 6;
     }
   }
 
@@ -2295,7 +2228,7 @@ function makeSkyline(): BuildingBox[] {
   const hues = [15, 30, 45, 60, 120, 160, 200, 210, 330, 350];
 
   // NYC-style skyline across the water (south side)
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 25; i++) {
     const x = -500 + rng() * 1000;
     const z = 650 + rng() * 250;
     const isTower = rng() > 0.6;
@@ -2313,7 +2246,7 @@ function makeSkyline(): BuildingBox[] {
   }
 
   // Additional skyline on other sides (thinner ring)
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 20; i++) {
     const side = Math.floor(rng() * 3);
     let x: number, z: number;
     if (side === 0) { x = -550 - rng() * 200; z = -400 + rng() * 600; }
@@ -2630,7 +2563,7 @@ function City() {
     const out: { x: number; z: number; s: number; palm: boolean }[] = [];
     for (const rx of ROAD_XS) {
       const w = roadWidth(rx);
-      for (let z = -400; z <= 260; z += 22 + Math.floor(rng() * 10)) {
+      for (let z = -350; z <= 250; z += 40 + Math.floor(rng() * 15)) {
         const isPalm = rng() > 0.4;
         out.push({ x: rx + w / 2 + 2.2, z: z + rng() * 4, s: 0.9 + rng() * 0.3, palm: isPalm });
         out.push({ x: rx - w / 2 - 2.2, z: z + rng() * 4, s: 0.9 + rng() * 0.3, palm: isPalm });
@@ -2641,7 +2574,7 @@ function City() {
       out.push({ x: PLAZA_POS.x + Math.cos(a) * 20, z: PLAZA_POS.z + Math.sin(a) * 20, s: 1.1 + rng() * 0.3, palm: false });
     }
     // Boardwalk palms
-    for (let bx = -400; bx <= 400; bx += 25 + Math.floor(rng() * 10)) {
+    for (let bx = -350; bx <= 350; bx += 45 + Math.floor(rng() * 15)) {
       out.push({ x: bx + rng() * 3, z: 272 + rng() * 3, s: 1.0 + rng() * 0.4, palm: true });
     }
     return out;
@@ -2651,9 +2584,8 @@ function City() {
     const out: { x: number; z: number }[] = [];
     for (const rx of ROAD_XS) {
       const w = roadWidth(rx);
-      for (let z = -400; z <= 260; z += 40) {
+      for (let z = -350; z <= 250; z += 80) {
         out.push({ x: rx + w / 2 + 2, z });
-        out.push({ x: rx - w / 2 - 2, z: z + 20 });
       }
     }
     return out;
