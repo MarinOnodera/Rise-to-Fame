@@ -1630,26 +1630,39 @@ function NPCPedestrians() {
 
 // ===== 水辺 (リゾート要素) =====
 function WaterBody() {
-  const ref = useRef<THREE.Mesh>(null);
-  const waterCol = useMemo(() => new THREE.Color("#2299bb"), []);
-  const deepCol = useMemo(() => new THREE.Color("#0e5577"), []);
+  const oceanRef = useRef<THREE.Mesh>(null);
+  const waveRefs = useRef<THREE.Mesh[]>([]);
+  const waterCol = useMemo(() => new THREE.Color("#1bb8d0"), []);
+  const deepCol = useMemo(() => new THREE.Color("#0a6080"), []);
+  const shallowCol = useMemo(() => new THREE.Color("#40d8e8"), []);
+  const foamCol = useMemo(() => new THREE.Color("#e8f4f8"), []);
 
   useFrame((state) => {
-    if (!ref.current) return;
     const t = state.clock.elapsedTime;
-    (ref.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-      0.25 + Math.sin(t * 0.6) * 0.1;
-    ref.current.position.y = -0.25 + Math.sin(t * 0.4) * 0.08;
+    if (oceanRef.current) {
+      (oceanRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
+        0.2 + Math.sin(t * 0.5) * 0.08;
+    }
+    // Animate wave strips
+    waveRefs.current.forEach((wave, i) => {
+      if (!wave) return;
+      const phase = t * 0.8 + i * 1.2;
+      const baseZ = 320 + i * 12;
+      wave.position.z = baseZ + Math.sin(phase) * 4;
+      wave.position.y = -0.1 + Math.sin(phase) * 0.15;
+      const mat = wave.material as THREE.MeshStandardMaterial;
+      mat.opacity = 0.4 + Math.sin(phase + 0.5) * 0.2;
+    });
   });
 
   const rocks = useMemo(() => {
     const rng = mulberry32(777);
     const out: { x: number; z: number; s: number; ry: number }[] = [];
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 10; i++) {
       out.push({
-        x: -500 + rng() * 1000,
-        z: 295 + rng() * 8,
-        s: 0.3 + rng() * 0.8,
+        x: -400 + rng() * 800,
+        z: 315 + rng() * 10,
+        s: 0.3 + rng() * 0.6,
         ry: rng() * Math.PI * 2,
       });
     }
@@ -1658,57 +1671,83 @@ function WaterBody() {
 
   return (
     <group>
+      {/* Sandy beach — wide, walkable */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 310]}>
+        <planeGeometry args={[1400, 80]} />
+        <meshStandardMaterial color="#e8d5a0" roughness={0.95} />
+      </mesh>
+      {/* Wet sand near waterline */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 340]}>
+        <planeGeometry args={[1400, 20]} />
+        <meshStandardMaterial color="#c4b080" roughness={0.8} metalness={0.15} />
+      </mesh>
+      {/* Shallow water (turquoise, transparent) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 370]}>
+        <planeGeometry args={[1400, 50]} />
+        <meshStandardMaterial
+          color={shallowCol}
+          emissive={shallowCol}
+          emissiveIntensity={0.15}
+          transparent opacity={0.6}
+          metalness={0.4} roughness={0.1}
+        />
+      </mesh>
+      {/* Wave strips (animated foam lines) */}
+      {[0, 1, 2, 3, 4].map((i) => (
+        <mesh
+          key={`wave${i}`}
+          ref={(el) => { if (el) waveRefs.current[i] = el; }}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, -0.05, 320 + i * 12]}
+        >
+          <planeGeometry args={[1400, 3]} />
+          <meshStandardMaterial
+            color={foamCol}
+            emissive={foamCol}
+            emissiveIntensity={0.4}
+            transparent opacity={0.5}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
       {/* Main ocean surface */}
-      <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.25, 550]}>
-        <planeGeometry args={[2000, 600]} />
+      <mesh ref={oceanRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 600]}>
+        <planeGeometry args={[2000, 500]} />
         <meshStandardMaterial
           color={waterCol}
           emissive={waterCol}
-          emissiveIntensity={0.25}
-          transparent
-          opacity={0.82}
-          metalness={0.7}
-          roughness={0.15}
+          emissiveIntensity={0.2}
+          transparent opacity={0.85}
+          metalness={0.7} roughness={0.12}
         />
       </mesh>
-      {/* Deeper water further out */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.6, 900]}>
-        <planeGeometry args={[2000, 600]} />
+      {/* Deep ocean */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 950]}>
+        <planeGeometry args={[2000, 500]} />
         <meshStandardMaterial color={deepCol} metalness={0.5} roughness={0.2} />
       </mesh>
-      {/* Beach/shore strip */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 290]}>
-        <planeGeometry args={[1400, 20]} />
-        <meshStandardMaterial color="#c2b280" roughness={0.95} />
+      {/* Sparkle highlights on water */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.15, 500]}>
+        <planeGeometry args={[1400, 300]} />
+        <meshStandardMaterial
+          color="#ffffff"
+          emissive="#aaeeff"
+          emissiveIntensity={0.08}
+          transparent opacity={0.06}
+          toneMapped={false}
+        />
       </mesh>
-      {/* Seawall / boardwalk */}
-      <mesh position={[0, 0.3, 278]}>
-        <boxGeometry args={[1400, 0.8, 4]} />
-        <meshStandardMaterial color="#8a7b6b" roughness={0.85} />
-      </mesh>
-      {/* Boardwalk railing (single rail bar + sparse posts) */}
-      <mesh position={[0, 1.5, 276.5]}>
-        <boxGeometry args={[1400, 0.06, 0.12]} />
-        <meshStandardMaterial color="#555" metalness={0.6} roughness={0.3} />
-      </mesh>
-      {Array.from({ length: 14 }).map((_, i) => (
-        <mesh key={`rp${i}`} position={[-600 + i * 90, 1.0, 276.5]}>
-          <cylinderGeometry args={[0.06, 0.06, 1.4, 4]} />
-          <meshStandardMaterial color="#555" metalness={0.6} roughness={0.3} />
-        </mesh>
-      ))}
       {/* Shore rocks */}
       {rocks.map((r, i) => (
-        <mesh key={`rock${i}`} position={[r.x, r.s * 0.3, r.z]} rotation={[0, r.ry, 0]}>
+        <mesh key={`rock${i}`} position={[r.x, r.s * 0.25, r.z]} rotation={[0, r.ry, 0]}>
           <dodecahedronGeometry args={[r.s, 0]} />
-          <meshStandardMaterial color="#665544" roughness={0.9} />
+          <meshStandardMaterial color="#887766" roughness={0.9} />
         </mesh>
       ))}
     </group>
   );
 }
 
-// ===== モノレール =====
 // ===== モノレール定数 =====
 const MONO_RX = 350;
 const MONO_RZ = 300;
@@ -1716,9 +1755,10 @@ const MONO_H = 20;
 const MONO_STATION_ANGLE = Math.PI * 0.45;
 const MONO_STATION_X = Math.cos(MONO_STATION_ANGLE) * MONO_RX;
 const MONO_STATION_Z = Math.sin(MONO_STATION_ANGLE) * MONO_RZ;
-const MONO_LOOP_TIME = 10;
+const MONO_LOOP_TIME = 40;
 const MONO_SPEED = (Math.PI * 2) / MONO_LOOP_TIME;
-const MONO_STOP_DURATION = 4;
+const MONO_DEPART_INTERVAL = 300;
+const MONO_STOP_DURATION = 15;
 
 function MonorailTrack() {
   const pillars = useMemo(() => {
@@ -1746,6 +1786,88 @@ function MonorailTrack() {
   );
 }
 
+// Shared train body (yellow/orange Zootopia style)
+function TrainBody() {
+  const bodyCol = useMemo(() => new THREE.Color("#f0a030"), []);
+  const accentCol = useMemo(() => new THREE.Color("#e07820"), []);
+  const windowCol = useMemo(() => new THREE.Color("#3355aa"), []);
+  const trimCol = useMemo(() => new THREE.Color("#cc5020"), []);
+
+  return (
+    <group>
+      {[0, -5, -10].map((cz, ci) => (
+        <group key={ci} position={[0, 0, cz]}>
+          {/* Main body — rounded box shape */}
+          <mesh castShadow>
+            <capsuleGeometry args={[1.0, 3.0, 6, 12]} />
+            <meshStandardMaterial color={bodyCol} roughness={0.25} metalness={0.35} />
+          </mesh>
+          {/* Roof dome */}
+          <mesh position={[0, 1.0, 0]}>
+            <capsuleGeometry args={[0.7, 2.8, 4, 8]} />
+            <meshStandardMaterial color={accentCol} roughness={0.3} metalness={0.3} />
+          </mesh>
+          {/* Horizontal stripe */}
+          <mesh position={[0, -0.2, 0]}>
+            <boxGeometry args={[2.1, 0.15, 4.2]} />
+            <meshStandardMaterial color={trimCol} roughness={0.4} />
+          </mesh>
+          {/* Windows left */}
+          {[-1.0, -0.2, 0.6].map((wz, wi) => (
+            <mesh key={`wl${wi}`} position={[0.92, 0.15, wz]}>
+              <boxGeometry args={[0.04, 0.6, 0.7]} />
+              <meshStandardMaterial
+                color={windowCol} emissive={windowCol}
+                emissiveIntensity={0.6} toneMapped={false}
+              />
+            </mesh>
+          ))}
+          {/* Windows right */}
+          {[-1.0, -0.2, 0.6].map((wz, wi) => (
+            <mesh key={`wr${wi}`} position={[-0.92, 0.15, wz]}>
+              <boxGeometry args={[0.04, 0.6, 0.7]} />
+              <meshStandardMaterial
+                color={windowCol} emissive={windowCol}
+                emissiveIntensity={0.6} toneMapped={false}
+              />
+            </mesh>
+          ))}
+          {/* Bottom undercarriage */}
+          <mesh position={[0, -0.9, 0]}>
+            <boxGeometry args={[1.6, 0.15, 4.0]} />
+            <meshStandardMaterial color="#333" roughness={0.8} />
+          </mesh>
+        </group>
+      ))}
+      {/* Front nose (lead car) */}
+      <mesh position={[0, 0.1, 4.2]} rotation={[0.1, 0, 0]}>
+        <capsuleGeometry args={[0.85, 0.6, 6, 10]} />
+        <meshStandardMaterial color={bodyCol} roughness={0.2} metalness={0.4} />
+      </mesh>
+      {/* Front windshield */}
+      <mesh position={[0, 0.3, 4.6]}>
+        <boxGeometry args={[1.2, 0.7, 0.04]} />
+        <meshStandardMaterial color={windowCol} emissive={windowCol} emissiveIntensity={0.5} toneMapped={false} />
+      </mesh>
+      {/* Headlights */}
+      <mesh position={[0.5, -0.2, 4.6]}>
+        <sphereGeometry args={[0.12, 6, 6]} />
+        <meshStandardMaterial color="#fff" emissive="#ffffcc" emissiveIntensity={3} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.5, -0.2, 4.6]}>
+        <sphereGeometry args={[0.12, 6, 6]} />
+        <meshStandardMaterial color="#fff" emissive="#ffffcc" emissiveIntensity={3} toneMapped={false} />
+      </mesh>
+      {/* Rear light */}
+      <mesh position={[0, -0.1, -12.5]}>
+        <sphereGeometry args={[0.1, 6, 6]} />
+        <meshStandardMaterial color="#ff3333" emissive="#ff3333" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+// Rideable train (Train A) — stops at station for boarding
 function MonorailTrain({
   ridingRef,
   onDismount,
@@ -1755,39 +1877,83 @@ function MonorailTrain({
 }) {
   const ref = useRef<THREE.Group>(null);
   const angleRef = useRef(MONO_STATION_ANGLE);
-  const stoppedRef = useRef(0);
+  const stateRef = useRef<"running" | "stopping" | "stopped" | "departing">("running");
+  const stopTimerRef = useRef(0);
+  const departTimerRef = useRef(0);
+  const hasLoopedRef = useRef(false);
   const ridingStartRef = useRef(false);
   const { camera } = useThree();
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     if (!ref.current) return;
     const dtc = Math.min(dt, 0.05);
+    const elapsed = state.clock.elapsedTime;
 
-    const atStation =
-      Math.abs(((angleRef.current - MONO_STATION_ANGLE) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI) < 0.15;
+    // Check if near station
+    const angleDiff = ((angleRef.current - MONO_STATION_ANGLE) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+    const nearStation = Math.abs(angleDiff) < 0.12;
 
-    if (atStation && stoppedRef.current < MONO_STOP_DURATION) {
-      stoppedRef.current += dtc;
+    // Decide whether to stop: every MONO_DEPART_INTERVAL seconds
+    const shouldStop = nearStation && Math.floor(elapsed / MONO_DEPART_INTERVAL) !== Math.floor((elapsed - dtc) / MONO_DEPART_INTERVAL)
+      || (nearStation && stateRef.current === "running" && ridingRef.current);
+
+    if (stateRef.current === "running") {
+      angleRef.current += dtc * MONO_SPEED;
+      // Auto-stop at station periodically or when player boards
+      if (nearStation && (shouldStop || (ridingRef.current && !ridingStartRef.current))) {
+        stateRef.current = "stopping";
+        stopTimerRef.current = 0;
+      }
+      // Also stop periodically: every 5 min equivalent check
+      if (nearStation && !hasLoopedRef.current) {
+        const period = Math.floor(elapsed / MONO_DEPART_INTERVAL);
+        if (period > 0 && period !== departTimerRef.current) {
+          departTimerRef.current = period;
+          stateRef.current = "stopping";
+          stopTimerRef.current = 0;
+        }
+      }
+    } else if (stateRef.current === "stopping") {
+      // Decelerate
+      const decel = Math.max(0, 1 - stopTimerRef.current / 1.5);
+      angleRef.current += dtc * MONO_SPEED * decel;
+      stopTimerRef.current += dtc;
+      if (stopTimerRef.current >= 1.5) {
+        stateRef.current = "stopped";
+        stopTimerRef.current = 0;
+        if (ridingRef.current) ridingStartRef.current = true;
+      }
+    } else if (stateRef.current === "stopped") {
+      stopTimerRef.current += dtc;
       if (ridingRef.current && !ridingStartRef.current) {
         ridingStartRef.current = true;
       }
-      if (ridingRef.current && ridingStartRef.current && stoppedRef.current > MONO_STOP_DURATION * 0.8) {
-        // second stop after a full loop
-      }
-    } else {
-      if (stoppedRef.current >= MONO_STOP_DURATION) {
-        stoppedRef.current = 0;
-        if (ridingRef.current && ridingStartRef.current) {
-          const looped =
-            Math.abs(((angleRef.current - MONO_STATION_ANGLE) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI) < 0.3;
-          if (looped) {
-            ridingRef.current = false;
-            ridingStartRef.current = false;
-            onDismount();
-          }
+      if (stopTimerRef.current >= MONO_STOP_DURATION) {
+        if (ridingRef.current && ridingStartRef.current && hasLoopedRef.current) {
+          ridingRef.current = false;
+          ridingStartRef.current = false;
+          hasLoopedRef.current = false;
+          onDismount();
         }
+        stateRef.current = "departing";
+        stopTimerRef.current = 0;
+        hasLoopedRef.current = false;
       }
-      angleRef.current += dtc * MONO_SPEED;
+    } else if (stateRef.current === "departing") {
+      const accel = Math.min(1, stopTimerRef.current / 2);
+      angleRef.current += dtc * MONO_SPEED * accel;
+      stopTimerRef.current += dtc;
+      if (stopTimerRef.current >= 2) {
+        stateRef.current = "running";
+        if (ridingStartRef.current) hasLoopedRef.current = false;
+      }
+    }
+
+    // Track if we've done a full loop while riding
+    if (ridingStartRef.current && stateRef.current === "running") {
+      if (nearStation && angleRef.current > MONO_STATION_ANGLE + Math.PI) {
+        hasLoopedRef.current = true;
+      }
     }
 
     const a = angleRef.current;
@@ -1796,99 +1962,44 @@ function MonorailTrain({
     ref.current.position.set(tx, MONO_H + 0.6, tz);
     ref.current.rotation.y = -a + Math.PI / 2;
 
+    // Camera follows inside when riding
     if (ridingRef.current) {
-      const camInside = new THREE.Vector3(0, 1.4, -0.5);
-      camInside.applyEuler(new THREE.Euler(0, -a + Math.PI / 2, 0));
-      camInside.add(new THREE.Vector3(tx, MONO_H + 0.6, tz));
-      camera.position.lerp(camInside, 1 - Math.pow(0.001, dtc));
-      const lookAhead = new THREE.Vector3(
-        Math.cos(a - 0.1) * MONO_RX,
-        MONO_H + 1.5,
-        Math.sin(a - 0.1) * MONO_RZ
+      const camOff = new THREE.Vector3(0, 1.6, -1.0);
+      camOff.applyEuler(new THREE.Euler(0, -a + Math.PI / 2, 0));
+      camOff.add(new THREE.Vector3(tx, MONO_H + 0.6, tz));
+      camera.position.lerp(camOff, 1 - Math.pow(0.002, dtc));
+      const ahead = new THREE.Vector3(
+        Math.cos(a - 0.15) * MONO_RX,
+        MONO_H + 1.2,
+        Math.sin(a - 0.15) * MONO_RZ
       );
-      camera.lookAt(lookAhead);
+      camera.lookAt(ahead);
     }
   });
 
-  const pink = useMemo(() => new THREE.Color("#f5b8c4"), []);
-  const yellow = useMemo(() => new THREE.Color("#fde68a"), []);
-  const windowCol = useMemo(() => new THREE.Color("#aaddff"), []);
+  return (
+    <group ref={ref}>
+      <TrainBody />
+    </group>
+  );
+}
+
+// AI train (Train B) — always running, never stops, offset by half circle
+function MonorailTrainAI({ startAngle }: { startAngle: number }) {
+  const ref = useRef<THREE.Group>(null);
+  const angleRef = useRef(startAngle);
+
+  useFrame((_, dt) => {
+    if (!ref.current) return;
+    angleRef.current += Math.min(dt, 0.05) * MONO_SPEED;
+    const a = angleRef.current;
+    ref.current.position.set(Math.cos(a) * MONO_RX, MONO_H + 0.6, Math.sin(a) * MONO_RZ);
+    ref.current.rotation.y = -a + Math.PI / 2;
+  });
 
   return (
     <group ref={ref}>
-      {/* 3 cars */}
-      {[0, -4.5, -9].map((cz, ci) => (
-        <group key={ci} position={[0, 0, cz]}>
-          {/* Body - rounded using capsule */}
-          <mesh castShadow>
-            <capsuleGeometry args={[0.9, 2.5, 6, 12]} />
-            <meshStandardMaterial
-              color={ci === 0 ? yellow : pink}
-              roughness={0.3}
-              metalness={0.2}
-            />
-          </mesh>
-          {/* Roof accent */}
-          <mesh position={[0, 0.85, 0]}>
-            <boxGeometry args={[1.5, 0.08, 3.5]} />
-            <meshStandardMaterial color={ci === 0 ? pink : yellow} />
-          </mesh>
-          {/* Windows left */}
-          {[-0.8, 0, 0.8].map((wz, wi) => (
-            <mesh key={`wl${wi}`} position={[0.82, 0.1, wz]}>
-              <boxGeometry args={[0.03, 0.5, 0.55]} />
-              <meshStandardMaterial
-                color={windowCol}
-                emissive={windowCol}
-                emissiveIntensity={0.5}
-                toneMapped={false}
-              />
-            </mesh>
-          ))}
-          {/* Windows right */}
-          {[-0.8, 0, 0.8].map((wz, wi) => (
-            <mesh key={`wr${wi}`} position={[-0.82, 0.1, wz]}>
-              <boxGeometry args={[0.03, 0.5, 0.55]} />
-              <meshStandardMaterial
-                color={windowCol}
-                emissive={windowCol}
-                emissiveIntensity={0.5}
-                toneMapped={false}
-              />
-            </mesh>
-          ))}
-          {/* Bottom stripe */}
-          <mesh position={[0, -0.75, 0]}>
-            <boxGeometry args={[1.85, 0.06, 3.8]} />
-            <meshStandardMaterial color="#e8739a" />
-          </mesh>
-        </group>
-      ))}
-      {/* Front headlight */}
-      <mesh position={[0, 0, 3.5]}>
-        <sphereGeometry args={[0.18, 8, 8]} />
-        <meshStandardMaterial
-          color="#ffffff"
-          emissive="#ffffff"
-          emissiveIntensity={2}
-          toneMapped={false}
-        />
-      </mesh>
-      {/* Interior decor (visible through windows when riding) */}
-      {/* Hanging ads */}
-      <mesh position={[0, 0.5, -1]}>
-        <boxGeometry args={[0.6, 0.35, 0.02]} />
-        <meshStandardMaterial color="#ffb6c1" emissive="#ffb6c1" emissiveIntensity={0.3} />
-      </mesh>
-      <mesh position={[0, 0.5, -5.5]}>
-        <boxGeometry args={[0.6, 0.35, 0.02]} />
-        <meshStandardMaterial color="#fde68a" emissive="#fde68a" emissiveIntensity={0.3} />
-      </mesh>
-      {/* Heart photo spot in middle car */}
-      <mesh position={[0, 0, -4.5]}>
-        <torusGeometry args={[0.3, 0.06, 8, 16]} />
-        <meshStandardMaterial color="#ff6b8a" emissive="#ff6b8a" emissiveIntensity={0.8} toneMapped={false} />
-      </mesh>
+      <TrainBody />
     </group>
   );
 }
@@ -2573,9 +2684,9 @@ function City() {
       const a = (i / 8) * Math.PI * 2;
       out.push({ x: PLAZA_POS.x + Math.cos(a) * 20, z: PLAZA_POS.z + Math.sin(a) * 20, s: 1.1 + rng() * 0.3, palm: false });
     }
-    // Boardwalk palms
+    // Beach palms
     for (let bx = -350; bx <= 350; bx += 45 + Math.floor(rng() * 15)) {
-      out.push({ x: bx + rng() * 3, z: 272 + rng() * 3, s: 1.0 + rng() * 0.4, palm: true });
+      out.push({ x: bx + rng() * 3, z: 285 + rng() * 10, s: 1.1 + rng() * 0.5, palm: true });
     }
     return out;
   }, []);
@@ -2593,9 +2704,9 @@ function City() {
 
   return (
     <group>
-      {/* Ground - city area */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, -60]}>
-        <planeGeometry args={[1400, 700]} />
+      {/* Ground - city area (extends to beach edge) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow position={[0, 0, -30]}>
+        <planeGeometry args={[1400, 800]} />
         <meshStandardMaterial color="#4a8c3f" roughness={0.9} />
       </mesh>
 
@@ -2924,7 +3035,7 @@ function Player({
 
     // スライド衝突: X/Z 軸を独立に試して、壁にぶつかった軸だけ戻す
     const nextX = THREE.MathUtils.clamp(posRef.current.x + dx, -480, 480);
-    const nextZ = THREE.MathUtils.clamp(posRef.current.z + dz, -480, 270);
+    const nextZ = THREE.MathUtils.clamp(posRef.current.z + dz, -480, 345);
     if (!collidesBuildings(nextX, posRef.current.z, buildings)) {
       posRef.current.x = nextX;
     }
@@ -3091,6 +3202,7 @@ function SceneInner({
       <DynamicLighting />
       <City />
       <MonorailTrain ridingRef={ridingRef} onDismount={handleDismount} />
+      <MonorailTrainAI startAngle={MONO_STATION_ANGLE + Math.PI} />
       <Player avatar={avatar} input={input} onEnterGallery={onEnterGallery} ridingRef={ridingRef} dismountPosRef={playerPosRef} />
     </>
   );
