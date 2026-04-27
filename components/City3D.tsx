@@ -1773,7 +1773,7 @@ function MonorailTrack() {
   return (
     <group>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, MONO_H, 0]} scale={[MONO_RX, MONO_RZ, 1]}>
-        <torusGeometry args={[1, 0.12, 6, 64]} />
+        <torusGeometry args={[1, 0.06, 6, 64]} />
         <meshStandardMaterial color="#ddb8c0" metalness={0.5} roughness={0.2} />
       </mesh>
       {pillars.filter((_, i) => i % 3 === 0).map((p, i) => (
